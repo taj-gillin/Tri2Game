@@ -1,6 +1,8 @@
 // Define classes
 var Player = /** @class */ (function () {
     function Player() {
+        // Tells us which character the player is currently controlling. Range: [0,2]
+        this.selectedCharacter = 0;
         this.Buttons = {
             a: false,
             b: false,
@@ -60,36 +62,41 @@ var Players = [new Player(), new Player()];
 // Define global variables
 var state = "test";
 // Handle controllers (this isn't actually used since the controllers are queried every frame, but it might be helpful later)
+window.addEventListener("gamepadconnected", function (e) { gamepadHandler(e, true); }, false);
+window.addEventListener("gamepaddisconnected", function (e) { gamepadHandler(e, false); }, false);
 function gamepadHandler(event, connecting) {
     var gamepad = event.gamepad;
-    // Note:
     // gamepad === navigator.getGamepads()[gamepad.index]
     console.log("Debug: Change with gamepad. Id: " + gamepad.id);
 }
-window.addEventListener("gamepadconnected", function (e) { gamepadHandler(e, true); }, false);
-window.addEventListener("gamepaddisconnected", function (e) { gamepadHandler(e, false); }, false);
-//Start animation loop
+// Start animation loop
 setInterval(animate, 1000 / 10);
+// Animation loop
 function animate() {
     querryControllers();
     debug();
 }
+// Update controllers (needs to be called every frame since there is no event for pressing a button on a controller, so we have to look for changes instead)
 function querryControllers() {
+    // Get all gamepads (built in API)
     var querryGamePads = navigator.getGamepads();
+    // Update gamepads array to querries gamepads
     Gamepads = [];
-    var controllerCount = 0;
+    // For some reason, the querry always returns 4 objects and just makes the ones that aren't connected null, so we have to check for that
     for (var i_1 = 0; i_1 < querryGamePads.length; i_1++) {
         if (querryGamePads[i_1] != null)
             Gamepads.push(querryGamePads[i_1]);
     }
-    if (Gamepads.length <= 0) {
-        state = "no controllers";
-        return;
-    }
+    // Check how many controllers are connected and change gamestate if there aren't 2
     if (Gamepads.length > 2) {
-        state = Gamepads.length + " controllers";
+        state = "Overconnected";
+        return; // This is a guard statement. When this runs, it ends the function by returning nothing and the rest isn't executed. This is useful here since we only want the logic to run if there are exactly 2 controllers connected. 
+    }
+    if (Gamepads.length != 2) { // This is actually checking if there are less than 2 controllers, since we just checked for more than 2
+        state = "Disconnected";
         return;
     }
+    // Update buttons pressed by checking each controller
     for (var i = 0; i < Gamepads.length; i++) {
         Players[i].checkButtons(Gamepads[i]);
     }
@@ -99,6 +106,8 @@ function update() {
 function draw() {
 }
 function debug() {
+    // Right now this just turns the buttons into strings then modifies some h1 element to display them
+    // Controller 1
     var buttonOutput = "";
     buttonOutput += "A: " + Players[0].Buttons.a + "\n";
     buttonOutput += "B: " + Players[0].Buttons.b + "\n";
@@ -119,6 +128,7 @@ function debug() {
     buttonOutput += "Left Stick: " + Players[0].Buttons.leftStick + "\n";
     buttonOutput += "Right Stick: " + Players[0].Buttons.rightStick + "\n";
     debugOutput1.innerText = buttonOutput;
+    // Controller 2
     buttonOutput = "";
     buttonOutput += "A: " + Players[1].Buttons.a + "\n";
     buttonOutput += "B: " + Players[1].Buttons.b + "\n";
