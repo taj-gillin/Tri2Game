@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "compile": "tsc src/script.ts --watch --outDir build"
+    "compile": "tsc --watch"
   },
   "author": "",
   "license": "ISC"
