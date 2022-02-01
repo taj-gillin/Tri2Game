@@ -16,7 +16,7 @@ var __extends = (this && this.__extends) || (function () {
 // Define classes
 var Player = /** @class */ (function () {
     function Player(controllerNumber) {
-        this.Characters = [];
+        this.Characters = [new Shelly([100, 100], [0, 0]), new Mike([100, 100], [0, 0]), new Bill([100, 100], [0, 0])];
         this.controllerNumber = controllerNumber;
         this.selectedCharacter = 0;
         this.Buttons = {
@@ -93,6 +93,17 @@ var Player = /** @class */ (function () {
             this.selectedCharacter = (this.selectedCharacter + 5) % 3; // Adding 5 does the same thing as subtracting 1 conceptually, but subtracting 1 would actually cause the number to be negative
         if (this.Buttons.rightShoulder && !this.prevButtons.rightShoulder)
             this.selectedCharacter = (this.selectedCharacter + 1) % 3;
+        // Update velocity and update
+        for (var i = 0; i < this.Characters.length; i++) {
+            (i == this.selectedCharacter ? this.Characters[i].setVelocity(this.Buttons.leftStick) : this.Characters[i].setVelocity([0, 0])); // If character is selected, set its velocity based on left stick. Otherwise, set it to 0.
+            this.Characters[i].update();
+        }
+    };
+    Player.prototype.draw = function () {
+        for (var _i = 0, _a = this.Characters; _i < _a.length; _i++) {
+            var character = _a[_i];
+            character.draw();
+        }
     };
     return Player;
 }());
@@ -106,16 +117,63 @@ var GameObject = /** @class */ (function () {
 }());
 var Character = /** @class */ (function (_super) {
     __extends(Character, _super);
-    function Character(Position, Velocity) {
-        return _super.call(this, Position, Velocity) || this;
+    function Character(Position, Velocity, speedScalar) {
+        var _this = _super.call(this, Position, Velocity) || this;
+        _this.speedScalar = speedScalar;
+        return _this;
     }
     Character.prototype.update = function () {
         // Update position using velocity
         this.Position[0] += this.Velocity[0];
         this.Position[1] += this.Velocity[1];
     };
+    Character.prototype.setVelocity = function (Joystick) {
+        this.Velocity = [Joystick[0] * this.speedScalar, Joystick[1] * this.speedScalar];
+    };
     return Character;
 }(GameObject));
+var Shelly = /** @class */ (function (_super) {
+    __extends(Shelly, _super);
+    function Shelly(Position, Velocity) {
+        var _this = _super.call(this, Position, Velocity, 10) || this;
+        _this.height = 40;
+        _this.width = 20;
+        return _this;
+    }
+    Shelly.prototype.draw = function () {
+        context.fillStyle = "red";
+        context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
+    };
+    return Shelly;
+}(Character));
+var Mike = /** @class */ (function (_super) {
+    __extends(Mike, _super);
+    function Mike(Position, Velocity) {
+        var _this = _super.call(this, Position, Velocity, 20) || this;
+        _this.height = 40;
+        _this.width = 20;
+        return _this;
+    }
+    Mike.prototype.draw = function () {
+        context.fillStyle = "blue";
+        context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
+    };
+    return Mike;
+}(Character));
+var Bill = /** @class */ (function (_super) {
+    __extends(Bill, _super);
+    function Bill(Position, Velocity) {
+        var _this = _super.call(this, Position, Velocity, 30) || this;
+        _this.height = 40;
+        _this.width = 20;
+        return _this;
+    }
+    Bill.prototype.draw = function () {
+        context.fillStyle = "green";
+        context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
+    };
+    return Bill;
+}(Character));
 // Initiate canvas
 var canvas = document.getElementById("canvas");
 var context = canvas.getContext("2d");
@@ -128,6 +186,7 @@ var debugOutput2 = document.getElementById("debug2");
 var Gamepads = [];
 var Players = [new Player(0), new Player(1)];
 // Define global variables
+var frameRate = 60;
 var state = "playing";
 // Handle controllers (this isn't actually used since the controllers are queried every frame, but it might be helpful later)
 window.addEventListener("gamepadconnected", function (e) { gamepadHandler(e, true); }, false);
@@ -138,12 +197,13 @@ function gamepadHandler(event, connecting) {
     console.log("Debug: Change with gamepad. Id: " + gamepad.id);
 }
 // Start animation loop
-setInterval(animate, 1000 / 10);
+setInterval(animate, 1000 / frameRate);
 // Animation loop
 function animate() {
     querryControllers();
     update();
-    debug();
+    draw();
+    // debug();
 }
 // Update controllers (needs to be called every frame since there is no event for pressing a button on a controller, so we have to look for changes instead)
 function querryControllers() {
@@ -178,30 +238,35 @@ function update() {
     }
 }
 function draw() {
+    clearCanvas();
+    for (var _i = 0, Players_2 = Players; _i < Players_2.length; _i++) {
+        var player = Players_2[_i];
+        player.draw();
+    }
 }
 function debug() {
-    // Right now this just turns the buttons into strings then modifies some h1 element to display them
-    // Controller 1
     var buttonOutput = "";
-    buttonOutput += "A: " + Players[0].Buttons.a + "\n";
-    buttonOutput += "B: " + Players[0].Buttons.b + "\n";
-    buttonOutput += "X: " + Players[0].Buttons.x + "\n";
-    buttonOutput += "Y: " + Players[0].Buttons.y + "\n";
-    buttonOutput += "Left Shoulder: " + Players[0].Buttons.leftShoulder + "\n";
-    buttonOutput += "Right Shoulder: " + Players[0].Buttons.rightShoulder + "\n";
-    buttonOutput += "Left Trigger: " + Players[0].Buttons.leftTrigger + "\n";
-    buttonOutput += "Right Trigger: " + Players[0].Buttons.rightTrigger + "\n";
-    buttonOutput += "Dpad Up: " + Players[0].Buttons.dpadUp + "\n";
-    buttonOutput += "Dpad Down: " + Players[0].Buttons.dpadDown + "\n";
-    buttonOutput += "Dpad Left: " + Players[0].Buttons.dpadLeft + "\n";
-    buttonOutput += "Dpad Right: " + Players[0].Buttons.dpadRight + "\n";
-    buttonOutput += "Settings: " + Players[0].Buttons.settings + "\n";
-    buttonOutput += "View: " + Players[0].Buttons.view + "\n";
-    buttonOutput += "Left Stick Press: " + Players[0].Buttons.leftStickPress + "\n";
-    buttonOutput += "Right Stick Press: " + Players[0].Buttons.rightStickPress + "\n";
-    buttonOutput += "Left Stick: " + Players[0].Buttons.leftStick + "\n";
-    buttonOutput += "Right Stick: " + Players[0].Buttons.rightStick + "\n";
-    debugOutput1.innerText = buttonOutput;
+    // // Right now this just turns the buttons into strings then modifies some h1 element to display them
+    // // Controller 1
+    // buttonOutput += "A: " + Players[0].Buttons.a + "\n";
+    // buttonOutput += "B: " + Players[0].Buttons.b + "\n";
+    // buttonOutput += "X: " + Players[0].Buttons.x + "\n";
+    // buttonOutput += "Y: " + Players[0].Buttons.y + "\n";
+    // buttonOutput += "Left Shoulder: " + Players[0].Buttons.leftShoulder + "\n";
+    // buttonOutput += "Right Shoulder: " + Players[0].Buttons.rightShoulder + "\n";
+    // buttonOutput += "Left Trigger: " + Players[0].Buttons.leftTrigger + "\n";
+    // buttonOutput += "Right Trigger: " + Players[0].Buttons.rightTrigger + "\n";
+    // buttonOutput += "Dpad Up: " + Players[0].Buttons.dpadUp + "\n";
+    // buttonOutput += "Dpad Down: " + Players[0].Buttons.dpadDown + "\n";
+    // buttonOutput += "Dpad Left: " + Players[0].Buttons.dpadLeft + "\n";
+    // buttonOutput += "Dpad Right: " + Players[0].Buttons.dpadRight + "\n";
+    // buttonOutput += "Settings: " + Players[0].Buttons.settings + "\n";
+    // buttonOutput += "View: " + Players[0].Buttons.view + "\n";
+    // buttonOutput += "Left Stick Press: " + Players[0].Buttons.leftStickPress + "\n";
+    // buttonOutput += "Right Stick Press: " + Players[0].Buttons.rightStickPress + "\n";
+    // buttonOutput += "Left Stick: " + Players[0].Buttons.leftStick + "\n";
+    // buttonOutput += "Right Stick: " + Players[0].Buttons.rightStick + "\n";
+    // debugOutput1.innerText = buttonOutput;
     // // Controller 2
     // buttonOutput = "";
     // buttonOutput += "A: " + Players[1].Buttons.a + "\n";
@@ -223,7 +288,17 @@ function debug() {
     // buttonOutput += "Left Stick: " + Players[1].Buttons.leftStick + "\n";
     // buttonOutput += "Right Stick: " + Players[1].Buttons.rightStick + "\n";
     // debugOutput2.innerText = buttonOutput;
-    // Controller
-    buttonOutput = "Players 1 character: " + Players[0].selectedCharacter + "\nPlayers 2 character: " + Players[1].selectedCharacter + "\n";
+    // // Character switcher
+    // buttonOutput = `Players 1 character: ${Players[0].selectedCharacter}\nPlayers 2 character: ${Players[1].selectedCharacter}\n`;
+    // debugOutput1.innerText = buttonOutput;
+    // Checking for joystick normalization
+    buttonOutput = "";
+    var leftMag = Math.sqrt(Math.pow(Players[0].Buttons.leftStick[0], 2) + Math.pow(Players[0].Buttons.leftStick[1], 2));
+    buttonOutput = "Left Stick Magnitude: " + leftMag + "\n";
+    buttonOutput += "Right Stick Magnitude: " + Math.sqrt(Math.pow(Players[0].Buttons.rightStick[0], 2) + Math.pow(Players[0].Buttons.rightStick[1], 2)) + "\n";
     debugOutput1.innerText = buttonOutput;
+}
+function clearCanvas() {
+    context.fillStyle = 'rgba(0, 0, 0, 0.1)';
+    context.fillRect(0, 0, canvas.width, canvas.height);
 }
