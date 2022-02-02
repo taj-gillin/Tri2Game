@@ -16,6 +16,7 @@ var __extends = (this && this.__extends) || (function () {
 // Define classes
 var Player = /** @class */ (function () {
     function Player(controllerNumber) {
+        this.attackHoldTime = 0;
         this.Characters = [new Shelly([100, 100], [0, 0]), new Mike([100, 100], [0, 0]), new Bill([100, 100], [0, 0])];
         this.controllerNumber = controllerNumber;
         this.selectedCharacter = 0;
@@ -60,8 +61,6 @@ var Player = /** @class */ (function () {
             rightStick: [0, 0]
         };
     }
-    // Temporary testing code
-    // Characters.push(new Character())
     Player.prototype.checkButtons = function (gamepad) {
         this.Buttons.a = gamepad.buttons[0].pressed;
         this.Buttons.b = gamepad.buttons[1].pressed;
@@ -88,21 +87,32 @@ var Player = /** @class */ (function () {
             this.prevButtons[button] = this.Buttons[button];
         if (state == "playing")
             this.checkButtons(Gamepads[this.controllerNumber]);
+        // Update holding time for attack button
+        // If attack button is pressed, attack
+        this.attackHoldTime = (Math.abs(Math.sqrt(Math.pow(this.Buttons.rightStick[0], 2) + Math.pow(this.Buttons.rightStick[1], 2))) > 0.3) ? this.attackHoldTime + 1 : 0;
+        if (this.Buttons.rightStickPress && this.attackHoldTime > 0) {
+            this.Characters[this.selectedCharacter].attack();
+            this.attackHoldTime = 0;
+        }
         // Update character
         if (this.Buttons.leftShoulder && !this.prevButtons.leftShoulder)
             this.selectedCharacter = (this.selectedCharacter + 5) % 3; // Adding 5 does the same thing as subtracting 1 conceptually, but subtracting 1 would actually cause the number to be negative
         if (this.Buttons.rightShoulder && !this.prevButtons.rightShoulder)
             this.selectedCharacter = (this.selectedCharacter + 1) % 3;
-        // Update velocity and update
+        // Update character velocity
+        this.Characters[this.selectedCharacter].move(this.Buttons.leftStick); // If character is selected, set its velocity based on left stick. 
+        // Do any other character updates
         for (var i = 0; i < this.Characters.length; i++) {
-            (i == this.selectedCharacter ? this.Characters[i].setVelocity(this.Buttons.leftStick) : this.Characters[i].setVelocity([0, 0])); // If character is selected, set its velocity based on left stick. Otherwise, set it to 0.
             this.Characters[i].update();
         }
     };
     Player.prototype.draw = function () {
         for (var _i = 0, _a = this.Characters; _i < _a.length; _i++) {
             var character = _a[_i];
-            character.draw();
+            character.drawCharacter();
+        }
+        if (this.attackHoldTime > 0) {
+            this.Characters[this.selectedCharacter].drawAttackPreview();
         }
     };
     return Player;
@@ -115,63 +125,120 @@ var GameObject = /** @class */ (function () {
     }
     return GameObject;
 }());
+var CollidableObject = /** @class */ (function (_super) {
+    __extends(CollidableObject, _super);
+    function CollidableObject(Position, width, height) {
+        var _this = _super.call(this, Position, [0, 0]) || this;
+        _this.width = width;
+        _this.height = height;
+        return _this;
+    }
+    return CollidableObject;
+}(GameObject));
+var Box = /** @class */ (function (_super) {
+    __extends(Box, _super);
+    function Box(Position, width, height) {
+        return _super.call(this, Position, width, height) || this;
+    }
+    Box.prototype.update = function () { };
+    Box.prototype.draw = function () {
+        context.fillStyle = "red";
+        context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
+    };
+    return Box;
+}(CollidableObject));
 var Character = /** @class */ (function (_super) {
     __extends(Character, _super);
-    function Character(Position, Velocity, speedScalar) {
+    function Character(Position, Velocity, speedScalar, width, height) {
         var _this = _super.call(this, Position, Velocity) || this;
         _this.speedScalar = speedScalar;
+        _this.width = width;
+        _this.height = height;
         return _this;
     }
     Character.prototype.update = function () {
-        // Update position using velocity
-        this.Position[0] += this.Velocity[0];
-        this.Position[1] += this.Velocity[1];
     };
-    Character.prototype.setVelocity = function (Joystick) {
+    Character.prototype.checkCollision = function (object) {
+        if (this.Position[0] < object.Position[0] + object.width && this.Position[0] + this.width > object.Position[0] && this.Position[1] < object.Position[1] + object.height && this.Position[1] + this.height > object.Position[1])
+            return true;
+        return false;
+    };
+    Character.prototype.move = function (Joystick) {
         this.Velocity = [Joystick[0] * this.speedScalar, Joystick[1] * this.speedScalar];
+        if (Math.abs(this.Velocity[0]) > 0)
+            this.moveX();
+        if (Math.abs(this.Velocity[1]) > 0)
+            this.moveY();
     };
+    // I should turn these two into one function at some point
+    Character.prototype.moveX = function () {
+        this.Position[0] += this.Velocity[0];
+        for (var _i = 0, Objects_1 = Objects; _i < Objects_1.length; _i++) {
+            var object = Objects_1[_i];
+            if (this.checkCollision(object)) {
+                this.Position[0] -= this.Velocity[0];
+                this.Velocity[0] = (this.Velocity[0] > 0 ? object.Position[0] - (this.Position[0] + this.width) : (object.Position[0] + object.width) - this.Position[0]);
+                this.Position[0] += this.Velocity[0];
+                return;
+            }
+        }
+    };
+    Character.prototype.moveY = function () {
+        this.Position[1] += this.Velocity[1];
+        for (var _i = 0, Objects_2 = Objects; _i < Objects_2.length; _i++) {
+            var object = Objects_2[_i];
+            if (this.checkCollision(object)) {
+                this.Position[1] -= this.Velocity[1];
+                this.Velocity[1] = (this.Velocity[1] > 0 ? object.Position[1] - (this.Position[1] + this.height) : (object.Position[1] + object.height) - this.Position[1]);
+                this.Position[1] += this.Velocity[1];
+                return;
+            }
+        }
+    };
+    Character.prototype.draw = function () { alert("this should not be called!"); };
     return Character;
 }(GameObject));
 var Shelly = /** @class */ (function (_super) {
     __extends(Shelly, _super);
     function Shelly(Position, Velocity) {
-        var _this = _super.call(this, Position, Velocity, 10) || this;
-        _this.height = 40;
-        _this.width = 20;
-        return _this;
+        return _super.call(this, Position, Velocity, 10, 20, 40) || this;
     }
-    Shelly.prototype.draw = function () {
-        context.fillStyle = "red";
+    Shelly.prototype.drawCharacter = function () {
+        context.fillStyle = "purple";
         context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
     };
+    Shelly.prototype.attack = function () { };
+    ;
+    Shelly.prototype.drawAttackPreview = function () { };
+    ;
     return Shelly;
 }(Character));
 var Mike = /** @class */ (function (_super) {
     __extends(Mike, _super);
     function Mike(Position, Velocity) {
-        var _this = _super.call(this, Position, Velocity, 20) || this;
-        _this.height = 40;
-        _this.width = 20;
-        return _this;
+        return _super.call(this, Position, Velocity, 20, 20, 40) || this;
     }
-    Mike.prototype.draw = function () {
+    Mike.prototype.drawCharacter = function () {
         context.fillStyle = "blue";
         context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
     };
+    Mike.prototype.attack = function () { };
+    ;
+    Mike.prototype.drawAttackPreview = function () { };
     return Mike;
 }(Character));
 var Bill = /** @class */ (function (_super) {
     __extends(Bill, _super);
     function Bill(Position, Velocity) {
-        var _this = _super.call(this, Position, Velocity, 30) || this;
-        _this.height = 40;
-        _this.width = 20;
-        return _this;
+        return _super.call(this, Position, Velocity, 30, 20, 40) || this;
     }
-    Bill.prototype.draw = function () {
+    Bill.prototype.drawCharacter = function () {
         context.fillStyle = "green";
         context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
     };
+    Bill.prototype.attack = function () { };
+    ;
+    Bill.prototype.drawAttackPreview = function () { };
     return Bill;
 }(Character));
 // Initiate canvas
@@ -185,6 +252,7 @@ var debugOutput2 = document.getElementById("debug2");
 // Define global arrays
 var Gamepads = [];
 var Players = [new Player(0), new Player(1)];
+var Objects = [new Box([300, 300], 100, 100), new Box([500, 500], 100, 100)];
 // Define global variables
 var frameRate = 60;
 var state = "playing";
@@ -236,12 +304,20 @@ function update() {
         var player = Players_1[_i];
         player.update();
     }
+    for (var _a = 0, Objects_3 = Objects; _a < Objects_3.length; _a++) {
+        var object = Objects_3[_a];
+        object.update();
+    }
 }
 function draw() {
     clearCanvas();
     for (var _i = 0, Players_2 = Players; _i < Players_2.length; _i++) {
         var player = Players_2[_i];
         player.draw();
+    }
+    for (var _a = 0, Objects_4 = Objects; _a < Objects_4.length; _a++) {
+        var object = Objects_4[_a];
+        object.draw();
     }
 }
 function debug() {

@@ -24,14 +24,12 @@ type Buttons = {
 class Player {
     Buttons: Buttons;
     prevButtons: Buttons;
+    attackHoldTime: number = 0;
+
 
     selectedCharacter: number;  // Tells us which character the player is currently controlling. Range: [0,2]
     controllerNumber: number; // Which controller is linked to this player. Range: [0,1]
-    Characters: [Character, Character, Character] = [new Shelly([100,100], [0,0]), new Mike([100,100], [0,0]), new Bill([100,100], [0,0])];
-
-    // Temporary testing code
-    // Characters.push(new Character())
-
+    Characters: [Character, Character, Character] = [new Shelly([100, 100], [0, 0]), new Mike([100, 100], [0, 0]), new Bill([100, 100], [0, 0])];
 
     checkButtons(gamepad: Gamepad) {
         this.Buttons.a = gamepad.buttons[0].pressed;
@@ -105,20 +103,38 @@ class Player {
 
         if (state == "playing") this.checkButtons(Gamepads[this.controllerNumber]);
 
+        // Update holding time for attack button
+
+        // If attack button is pressed, attack
+        this.attackHoldTime = (Math.abs(Math.sqrt(Math.pow(this.Buttons.rightStick[0], 2) + Math.pow(this.Buttons.rightStick[1], 2))) > 0.3) ? this.attackHoldTime + 1 : 0;
+
+        if (this.Buttons.rightStickPress && this.attackHoldTime > 0) {
+            this.Characters[this.selectedCharacter].attack();
+            this.attackHoldTime = 0;
+        }
+
         // Update character
         if (this.Buttons.leftShoulder && !this.prevButtons.leftShoulder) this.selectedCharacter = (this.selectedCharacter + 5) % 3; // Adding 5 does the same thing as subtracting 1 conceptually, but subtracting 1 would actually cause the number to be negative
         if (this.Buttons.rightShoulder && !this.prevButtons.rightShoulder) this.selectedCharacter = (this.selectedCharacter + 1) % 3;
 
-        // Update velocity and update
-        for(let i = 0; i<this.Characters.length; i++) {
-            (i == this.selectedCharacter ? this.Characters[i].setVelocity(this.Buttons.leftStick) : this.Characters[i].setVelocity([0,0])); // If character is selected, set its velocity based on left stick. Otherwise, set it to 0.
+        // Update character velocity
+        this.Characters[this.selectedCharacter].move(this.Buttons.leftStick) // If character is selected, set its velocity based on left stick. 
+
+        // Do any other character updates
+        for (let i = 0; i < this.Characters.length; i++) {
             this.Characters[i].update();
         }
+
+
     }
 
     draw() {
-        for(let character of this.Characters){
-            character.draw();
+        for (let character of this.Characters) {
+            character.drawCharacter();
+        }
+
+        if (this.attackHoldTime > 0){
+            this.Characters[this.selectedCharacter].drawAttackPreview();
         }
     }
 }
@@ -133,64 +149,141 @@ abstract class GameObject {
         this.Velocity = Velocity;
     }
     abstract update(): void;
-}
-
-abstract class Character extends GameObject {
-    speedScalar: number;
-
-    constructor(Position: [number, number], Velocity: [number, number], speedScalar: number) {
-        super(Position, Velocity);
-        this.speedScalar = speedScalar;
-    }
-
-    update(): void {
-
-        // Update position using velocity
-        this.Position[0] += this.Velocity[0];
-        this.Position[1] += this.Velocity[1];
-    }
-
-    setVelocity(Joystick: [number, number]) {
-        this.Velocity = [Joystick[0] * this.speedScalar, Joystick[1] * this.speedScalar];
-    }
-
     abstract draw(): void;
 }
 
-class Shelly extends Character {
-    height: number = 40;
-    width: number = 20;
-    constructor(Position: [number, number], Velocity: [number, number]) {
-        super(Position, Velocity, 10);
+abstract class CollidableObject extends GameObject {
+    width: number;
+    height: number;
+
+    constructor(Position: [number, number], width, height) {
+        super(Position, [0, 0]);
+        this.width = width;
+        this.height = height;
     }
+}
+
+class Box extends CollidableObject {
+    constructor(Position: [number, number], width, height) {
+        super(Position, width, height);
+    }
+
+    update(): void { }
+
     draw(): void {
         context.fillStyle = "red";
         context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
     }
+
+}
+
+abstract class Character extends GameObject {
+    speedScalar: number;
+    width: number;
+    height: number;
+
+    constructor(Position: [number, number], Velocity: [number, number], speedScalar: number, width: number, height: number) {
+        super(Position, Velocity);
+        this.speedScalar = speedScalar;
+        this.width = width;
+        this.height = height;
+    }
+
+    update(): void {
+
+    }
+
+    checkCollision(object: CollidableObject): boolean {
+        if (this.Position[0] < object.Position[0] + object.width && this.Position[0] + this.width > object.Position[0] && this.Position[1] < object.Position[1] + object.height && this.Position[1] + this.height > object.Position[1]) return true;
+        return false;
+    }
+
+    move(Joystick: [number, number]) {
+        this.Velocity = [Joystick[0] * this.speedScalar, Joystick[1] * this.speedScalar];
+
+        if (Math.abs(this.Velocity[0]) > 0) this.moveX();
+        if (Math.abs(this.Velocity[1]) > 0) this.moveY();
+    }
+
+    // I should turn these two into one function at some point
+    moveX() {
+        this.Position[0] += this.Velocity[0];
+
+        for (let object of Objects) {
+            if (this.checkCollision(object)) {
+                this.Position[0] -= this.Velocity[0];
+                this.Velocity[0] = (this.Velocity[0] > 0 ? object.Position[0] - (this.Position[0] + this.width) : (object.Position[0] + object.width) - this.Position[0]);
+                this.Position[0] += this.Velocity[0];
+                return;
+            }
+        }
+    }
+
+    moveY() {
+        this.Position[1] += this.Velocity[1];
+
+        for (let object of Objects) {
+            if (this.checkCollision(object)) {
+                this.Position[1] -= this.Velocity[1];
+                this.Velocity[1] = (this.Velocity[1] > 0 ? object.Position[1] - (this.Position[1] + this.height) : (object.Position[1] + object.height) - this.Position[1]);
+                this.Position[1] += this.Velocity[1];
+                return;
+            }
+        }
+    }
+
+    draw(): void {alert("this should not be called!")}
+
+    abstract drawCharacter(): void;
+
+    abstract attack(): void;
+
+    abstract drawAttackPreview(): void;
+}
+
+class Shelly extends Character {
+
+    constructor(Position: [number, number], Velocity: [number, number]) {
+        super(Position, Velocity, 10, 20, 40);
+    }
+    drawCharacter(): void {
+        context.fillStyle = "purple";
+        context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
+    }
+
+    attack(): void{};
+
+    drawAttackPreview(): void{};
 }
 
 class Mike extends Character {
-    height: number = 40;
-    width: number = 20;
+
     constructor(Position: [number, number], Velocity: [number, number]) {
-        super(Position, Velocity, 20);
+        super(Position, Velocity, 20, 20, 40);
     }
-    draw(): void {
+    drawCharacter(): void {
         context.fillStyle = "blue";
         context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
     }
+
+    attack(): void{};
+
+    drawAttackPreview(): void {}
 }
 
 class Bill extends Character {
-    height: number = 40;
-    width: number = 20;
+
     constructor(Position: [number, number], Velocity: [number, number]) {
-        super(Position, Velocity, 30);
+        super(Position, Velocity, 30, 20, 40);
     }
-    draw(): void {
+    drawCharacter(): void {
         context.fillStyle = "green";
         context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
     }
+
+    attack(): void{};
+
+    drawAttackPreview(): void {}
 }
 
 // Initiate canvas
@@ -206,6 +299,7 @@ var debugOutput2 = document.getElementById("debug2");
 // Define global arrays
 var Gamepads: Array<Gamepad> = [];
 var Players: Array<Player> = [new Player(0), new Player(1)];
+var Objects: Array<CollidableObject> = [new Box([300, 300], 100, 100), new Box([500, 500], 100, 100)];
 
 // Define global variables
 const frameRate = 60;
@@ -271,6 +365,10 @@ function update() {
     for (const player of Players) {
         player.update();
     }
+
+    for (const object of Objects) {
+        object.update();
+    }
 }
 
 function draw() {
@@ -278,6 +376,10 @@ function draw() {
 
     for (const player of Players) {
         player.draw();
+    }
+
+    for (const object of Objects) {
+        object.draw();
     }
 
 }
