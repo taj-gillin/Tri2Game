@@ -105,7 +105,7 @@ class Player {
             rightStick: [0, 0]
         }
 
-        this.Characters = [new Shelly([100, 100], [0, 0], this.controllerNumber), new Mike([100, 100], [0, 0], this.controllerNumber), new Bill([100, 100], [0, 0], this.controllerNumber)];
+        this.Characters = [new Shelly(this.controllerNumber), new Esteban(this.controllerNumber), new Bill(this.controllerNumber)];
     }
 
     update() {
@@ -148,7 +148,7 @@ class Player {
         }
 
         for (let character of this.Characters) {
-          character.draw();
+            character.draw();
         }
     }
 
@@ -192,7 +192,7 @@ class Box extends CollidableObject {
     update(): void { }
 
     draw(): void {
-        context.fillStyle = "red";
+        context.fillStyle = "black";
         context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
     }
 
@@ -258,6 +258,57 @@ class ShotgunBullet extends Bullet {
     }
 }
 
+class Arrow extends Bullet {
+    maxDistance: number;
+    radius: number = 5;
+
+    constructor(Position: [number, number], Velocity: [number, number], team: number, maxDistance: number) {
+        super(Position, Velocity, team);
+        this.maxDistance = maxDistance;
+    }
+
+    update(): void {
+        let vmag = Math.sqrt(Math.pow(this.Velocity[0], 2) + Math.pow(this.Velocity[1], 2));
+        if (vmag < this.maxDistance) {
+            this.Position[0] += this.Velocity[0];
+            this.Position[1] += this.Velocity[1];
+            this.maxDistance -= vmag;
+        }
+        else {
+            let scalar = this.maxDistance / vmag;
+            this.Position[0] += this.Velocity[0] * scalar;
+            this.Position[1] += this.Velocity[1] * scalar;
+            this.maxDistance = 0;
+        }
+
+        for (let object of Objects) {
+            if (this.checkCollision(object)) {
+                this.maxDistance = 0;
+                return;
+            }
+        }
+
+        for (let character of Players[(this.team + 1) % 2].Characters) {
+            if (character.respawnTimer == 0 && this.checkCollision(character)) {
+                character.die();
+                this.maxDistance = 0;
+                return;
+            }
+        }
+    }
+
+    draw(): void {
+        context.fillStyle = "black";
+        context.beginPath();
+        context.arc(this.Position[0], this.Position[1], 5, 0, 2 * Math.PI);
+        context.fill();
+    }
+
+    checkCollision(object: CollidableObject): boolean {
+        return (this.Position[0] + this.radius > object.Position[0] && this.Position[0] - this.radius < object.Position[0] + object.width && this.Position[1] + this.radius > object.Position[1] && this.Position[1] - this.radius < object.Position[1] + object.height);
+    }
+}
+
 abstract class Character extends GameObject {
     cooldown: number; // Entered as milliseconds
     cooldownTimer: number = 0;
@@ -269,8 +320,10 @@ abstract class Character extends GameObject {
     respawnTimer: number = 0;
     hasBall: boolean = false;
 
-    constructor(Position: [number, number], Velocity: [number, number], speedScalar: number, cooldown: number, width: number, height: number, team: number) {
-        super(Position, Velocity);
+    
+
+    constructor(speedScalar: number, cooldown: number, width: number, height: number, team: number) {
+        super([-100,-100], [0,0]);
         this.speedScalar = speedScalar;
         this.width = width;
         this.height = height;
@@ -340,8 +393,39 @@ abstract class Character extends GameObject {
             }
         }
     }
-}
 
+    tryRespawn(): boolean {
+        if (this.respawnTimer > 1) {
+            this.respawnTimer--;
+            return false;
+        }
+        if (this.respawnTimer == 1) this.respawn();
+        return true;
+    }
+
+    drawCharacter(character: string): void {
+        // Key:
+        // Spellcast -- 0
+        // Thrust -- 4
+        // Walk -- 8
+        // Slash -- 12
+        // Shoot -- 16
+        //
+        // Direction:
+        // Up -- +0
+        // Left -- +1
+        // Down -- +2
+        // Right -- +3
+
+        // First, find right image
+
+        // If this isn't the selected character, draw the idle image
+        if(Players[this.team].Characters[Players[this.team].selectedCharacter] != this) {
+            // context.drawImage(, this.Position[0], this.Position[1], this.width, this.height);
+            return;
+        }
+    }
+}
 
 class Shelly extends Character {
 
@@ -359,8 +443,8 @@ class Shelly extends Character {
     bulletCount: number = 10;
     maxTime: number = 1000; // Time until full distance/min spread shot in milliseconds
 
-    constructor(Position: [number, number], Velocity: [number, number], team: number) {
-        super(Position, Velocity, 4, 1000, 20, 40, team);
+    constructor(team: number) {
+        super(4, 1000, 20, 40, team);
         this.bulletInfo = {
             minDistance: 100,
             maxDistance: 500,
@@ -381,9 +465,11 @@ class Shelly extends Character {
             return;
         }
 
-        context.fillStyle = "purple";
+        // Draws the character
+        context.fillStyle = this.team == 0 ? "blue" : "red";
         context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
-
+        context.fillStyle = "purple";
+        context.fillRect(this.Position[0] + 2, this.Position[1] + 2, this.width - 4, this.height - 4);
 
     }
 
@@ -393,14 +479,9 @@ class Shelly extends Character {
             if (bullet.maxDistance <= 0) this.Bullets.splice(this.Bullets.indexOf(bullet), 1);
         }
 
-        if (this.respawnTimer > 1) {
-            this.respawnTimer--;
-            return;
-        }
-        if (this.respawnTimer == 1) this.respawn();
+        if (!this.tryRespawn()) return;
+
         if (this.cooldownTimer > 0) this.cooldownTimer--;
-
-
 
         if (Players[this.team].attackHoldTime < (this.maxTime * (frameRate / 1000))) {
             this.bulletInfo.spread = this.bulletInfo.maxSpread / (1 + ((this.bulletInfo.spreadDivisor - 1) * Players[this.team].attackHoldTime / (this.maxTime * (frameRate / 1000))));
@@ -437,8 +518,8 @@ class Shelly extends Character {
 
 class Mike extends Character {
 
-    constructor(Position: [number, number], Velocity: [number, number], team: number) {
-        super(Position, Velocity, 6, 1000, 20, 40, team);
+    constructor(team: number) {
+        super(6, 1000, 20, 40, team);
     }
 
     draw(): void {
@@ -446,16 +527,16 @@ class Mike extends Character {
             return;
         }
 
-        context.fillStyle = "blue";
+        // Draws the character
+        context.fillStyle = this.team == 0 ? "blue" : "red";
         context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
+        context.fillStyle = "yellow";
+        context.fillRect(this.Position[0] + 2, this.Position[1] + 2, this.width - 4, this.height - 4);
     }
 
     update(): void {
-        if (this.respawnTimer > 1) {
-            this.respawnTimer--;
-            return;
-        }
-        if (this.respawnTimer == 1) this.respawn();
+        if (!this.tryRespawn()) return;
+
         if (this.cooldownTimer > 0) this.cooldownTimer--;
 
     };
@@ -468,24 +549,24 @@ class Mike extends Character {
 class Bill extends Character {
     attackRadius: number = 100;
 
-    constructor(Position: [number, number], Velocity: [number, number], team: number) {
-        super(Position, Velocity, 8, 1000, 20, 40, team);
+    constructor(team: number) {
+        super(8, 1000, 20, 40, team);
     }
     draw(): void {
         if (this.respawnTimer > 1) {
             return;
         }
 
-        context.fillStyle = "green";
+        // Draws the character
+        context.fillStyle = this.team == 0 ? "blue" : "red";
         context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
+        context.fillStyle = "green";
+        context.fillRect(this.Position[0] + 2, this.Position[1] + 2, this.width - 4, this.height - 4);
     }
 
     update(): void {
-        if (this.respawnTimer > 1) {
-            this.respawnTimer--;
-            return;
-        }
-        if (this.respawnTimer == 1) this.respawn();
+        if (!this.tryRespawn()) return;
+
         if (this.cooldownTimer > 0) this.cooldownTimer--;
     }
 
@@ -523,6 +604,68 @@ class Bill extends Character {
     }
 }
 
+class Esteban extends Character {
+
+    Arrows: Array<Arrow> = []
+    arrowInfo: {
+        distance: number,
+        travelTime: number,
+    }
+    maxTime: number = 1000; // Time until full distance/min spread shot in milliseconds
+
+    constructor(team: number) {
+        super(4, 1000, 20, 40, team);
+        this.arrowInfo = {
+            distance: 1000,
+            travelTime: this.maxTime * (frameRate / 1000),
+        }
+    }
+
+    draw(): void {
+        for (var arrow of this.Arrows) {
+            arrow.draw();
+        }
+
+        if (this.respawnTimer > 1) {
+            return;
+        }
+
+        // Draws the character
+        context.fillStyle = this.team == 0 ? "blue" : "red";
+        context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
+        context.fillStyle = "pink";
+        context.fillRect(this.Position[0] + 2, this.Position[1] + 2, this.width - 4, this.height - 4);
+
+    }
+
+    update(): void {
+        for (var arrow of this.Arrows) {
+            arrow.update();
+            if (arrow.maxDistance <= 0) this.Arrows.splice(this.Arrows.indexOf(arrow), 1);
+        }
+
+        if (!this.tryRespawn()) return;
+
+        if (this.cooldownTimer > 0) this.cooldownTimer--;
+    }
+
+    attack(): void {
+        this.cooldownTimer = this.cooldown;
+
+        let theta = Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0]);
+        var arrow = new Arrow([this.Position[0] + this.width / 2, this.Position[1] + this.height / 2], [this.arrowInfo.distance * Math.cos(theta) / this.arrowInfo.travelTime, this.arrowInfo.distance * Math.sin(theta) / this.arrowInfo.travelTime], this.team, this.arrowInfo.distance);
+        this.Arrows.push(arrow);
+    }
+
+    drawAttackPreview(): void {
+        context.fillStyle = attackPreviewStyle;
+        context.beginPath();
+        context.moveTo(this.Position[0] + this.width / 2, this.Position[1] + this.height / 2);
+        context.lineTo(this.Position[0] + this.width / 2 + this.arrowInfo.distance * Math.cos(Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0])), this.Position[1] + this.height / 2 + this.arrowInfo.distance * Math.sin(Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0])));
+        context.stroke();
+    }
+}
+
 // Initiate canvas
 var canvas = document.getElementById("canvas") as HTMLCanvasElement;
 var context = canvas.getContext("2d");
@@ -536,12 +679,18 @@ var debugOutput2 = document.getElementById("debug2");
 // Define global variables
 const frameRate = 60;
 var state = "playing";
-const attackPreviewStyle = "rgba(255, 255, 255, 0.1)";
+const attackPreviewStyle = "rgba(0, 0, 0, 0.1)";
 
 // Define global arrays
 var Gamepads: Array<Gamepad> = [];
 var Players: Array<Player> = [new Player(0), new Player(1)];
 var Objects: Array<CollidableObject> = [new Box([window.innerWidth / 2 - 250, window.innerHeight / 2 - 50], 100, 100), new Box([window.innerWidth / 2 + 150, window.innerHeight / 2 - 50], 100, 100)];
+
+// Add walls
+Objects.push(new Box([0, -5], window.innerWidth, 10));
+Objects.push(new Box([-5, 0], 10, window.innerHeight));
+Objects.push(new Box([0, window.innerHeight - 5], window.innerWidth, 10));
+Objects.push(new Box([window.innerWidth - 5, 0], 10, window.innerHeight));
 
 reset();
 
@@ -691,6 +840,13 @@ function debug() {
 
 
 function clearCanvas() {
-    context.fillStyle = 'rgba(0, 0, 0)';
+    context.fillStyle = 'rgba(255, 255, 255)';
     context.fillRect(0, 0, canvas.width, canvas.height);
+}
+
+function loadImages(){
+    const Esteban = new Image();
+    Esteban.src = "../../../assets/textures/characters/Esteban.png";
+
+
 }

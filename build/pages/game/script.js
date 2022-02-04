@@ -59,7 +59,7 @@ var Player = /** @class */ (function () {
             leftStick: [0, 0],
             rightStick: [0, 0]
         };
-        this.Characters = [new Shelly([100, 100], [0, 0], this.controllerNumber), new Mike([100, 100], [0, 0], this.controllerNumber), new Bill([100, 100], [0, 0], this.controllerNumber)];
+        this.Characters = [new Shelly(this.controllerNumber), new Esteban(this.controllerNumber), new Bill(this.controllerNumber)];
     }
     Player.prototype.checkButtons = function (gamepad) {
         this.Buttons.a = gamepad.buttons[0].pressed;
@@ -166,7 +166,7 @@ var Box = /** @class */ (function (_super) {
     }
     Box.prototype.update = function () { };
     Box.prototype.draw = function () {
-        context.fillStyle = "red";
+        context.fillStyle = "black";
         context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
     };
     return Box;
@@ -228,10 +228,58 @@ var ShotgunBullet = /** @class */ (function (_super) {
     };
     return ShotgunBullet;
 }(Bullet));
+var Arrow = /** @class */ (function (_super) {
+    __extends(Arrow, _super);
+    function Arrow(Position, Velocity, team, maxDistance) {
+        var _this = _super.call(this, Position, Velocity, team) || this;
+        _this.radius = 5;
+        _this.maxDistance = maxDistance;
+        return _this;
+    }
+    Arrow.prototype.update = function () {
+        var vmag = Math.sqrt(Math.pow(this.Velocity[0], 2) + Math.pow(this.Velocity[1], 2));
+        if (vmag < this.maxDistance) {
+            this.Position[0] += this.Velocity[0];
+            this.Position[1] += this.Velocity[1];
+            this.maxDistance -= vmag;
+        }
+        else {
+            var scalar = this.maxDistance / vmag;
+            this.Position[0] += this.Velocity[0] * scalar;
+            this.Position[1] += this.Velocity[1] * scalar;
+            this.maxDistance = 0;
+        }
+        for (var _i = 0, Objects_2 = Objects; _i < Objects_2.length; _i++) {
+            var object = Objects_2[_i];
+            if (this.checkCollision(object)) {
+                this.maxDistance = 0;
+                return;
+            }
+        }
+        for (var _a = 0, _b = Players[(this.team + 1) % 2].Characters; _a < _b.length; _a++) {
+            var character = _b[_a];
+            if (character.respawnTimer == 0 && this.checkCollision(character)) {
+                character.die();
+                this.maxDistance = 0;
+                return;
+            }
+        }
+    };
+    Arrow.prototype.draw = function () {
+        context.fillStyle = "black";
+        context.beginPath();
+        context.arc(this.Position[0], this.Position[1], 5, 0, 2 * Math.PI);
+        context.fill();
+    };
+    Arrow.prototype.checkCollision = function (object) {
+        return (this.Position[0] + this.radius > object.Position[0] && this.Position[0] - this.radius < object.Position[0] + object.width && this.Position[1] + this.radius > object.Position[1] && this.Position[1] - this.radius < object.Position[1] + object.height);
+    };
+    return Arrow;
+}(Bullet));
 var Character = /** @class */ (function (_super) {
     __extends(Character, _super);
-    function Character(Position, Velocity, speedScalar, cooldown, width, height, team) {
-        var _this = _super.call(this, Position, Velocity) || this;
+    function Character(speedScalar, cooldown, width, height, team) {
+        var _this = _super.call(this, [-100, -100], [0, 0]) || this;
         _this.cooldownTimer = 0;
         _this.respawnTime = 3000 * (frameRate / 1000);
         _this.respawnTimer = 0;
@@ -258,8 +306,8 @@ var Character = /** @class */ (function (_super) {
     // I should turn these two into one function at some point
     Character.prototype.moveX = function () {
         this.Position[0] += this.Velocity[0];
-        for (var _i = 0, Objects_2 = Objects; _i < Objects_2.length; _i++) {
-            var object = Objects_2[_i];
+        for (var _i = 0, Objects_3 = Objects; _i < Objects_3.length; _i++) {
+            var object = Objects_3[_i];
             if (this.checkCollision(object)) {
                 this.Position[0] -= this.Velocity[0];
                 this.Velocity[0] = (this.Velocity[0] > 0 ? object.Position[0] - (this.Position[0] + this.width) : (object.Position[0] + object.width) - this.Position[0]);
@@ -270,8 +318,8 @@ var Character = /** @class */ (function (_super) {
     };
     Character.prototype.moveY = function () {
         this.Position[1] += this.Velocity[1];
-        for (var _i = 0, Objects_3 = Objects; _i < Objects_3.length; _i++) {
-            var object = Objects_3[_i];
+        for (var _i = 0, Objects_4 = Objects; _i < Objects_4.length; _i++) {
+            var object = Objects_4[_i];
             if (this.checkCollision(object)) {
                 this.Position[1] -= this.Velocity[1];
                 this.Velocity[1] = (this.Velocity[1] > 0 ? object.Position[1] - (this.Position[1] + this.height) : (object.Position[1] + object.height) - this.Position[1]);
@@ -292,12 +340,41 @@ var Character = /** @class */ (function (_super) {
             }
         }
     };
+    Character.prototype.tryRespawn = function () {
+        if (this.respawnTimer > 1) {
+            this.respawnTimer--;
+            return false;
+        }
+        if (this.respawnTimer == 1)
+            this.respawn();
+        return true;
+    };
+    Character.prototype.drawCharacter = function (character) {
+        // Key:
+        // Spellcast -- 0
+        // Thrust -- 4
+        // Walk -- 8
+        // Slash -- 12
+        // Shoot -- 16
+        //
+        // Direction:
+        // Up -- +0
+        // Left -- +1
+        // Down -- +2
+        // Right -- +3
+        // First, find right image
+        // If this isn't the selected character, draw the idle image
+        if (Players[this.team].Characters[Players[this.team].selectedCharacter] != this) {
+            // context.drawImage(, this.Position[0], this.Position[1], this.width, this.height);
+            return;
+        }
+    };
     return Character;
 }(GameObject));
 var Shelly = /** @class */ (function (_super) {
     __extends(Shelly, _super);
-    function Shelly(Position, Velocity, team) {
-        var _this = _super.call(this, Position, Velocity, 4, 1000, 20, 40, team) || this;
+    function Shelly(team) {
+        var _this = _super.call(this, 4, 1000, 20, 40, team) || this;
         _this.Bullets = [];
         _this.bulletCount = 10;
         _this.maxTime = 1000; // Time until full distance/min spread shot in milliseconds
@@ -320,8 +397,11 @@ var Shelly = /** @class */ (function (_super) {
         if (this.respawnTimer > 1) {
             return;
         }
-        context.fillStyle = "purple";
+        // Draws the character
+        context.fillStyle = this.team == 0 ? "blue" : "red";
         context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
+        context.fillStyle = "purple";
+        context.fillRect(this.Position[0] + 2, this.Position[1] + 2, this.width - 4, this.height - 4);
     };
     Shelly.prototype.update = function () {
         for (var _i = 0, _a = this.Bullets; _i < _a.length; _i++) {
@@ -330,12 +410,8 @@ var Shelly = /** @class */ (function (_super) {
             if (bullet.maxDistance <= 0)
                 this.Bullets.splice(this.Bullets.indexOf(bullet), 1);
         }
-        if (this.respawnTimer > 1) {
-            this.respawnTimer--;
+        if (!this.tryRespawn())
             return;
-        }
-        if (this.respawnTimer == 1)
-            this.respawn();
         if (this.cooldownTimer > 0)
             this.cooldownTimer--;
         if (Players[this.team].attackHoldTime < (this.maxTime * (frameRate / 1000))) {
@@ -369,23 +445,22 @@ var Shelly = /** @class */ (function (_super) {
 }(Character));
 var Mike = /** @class */ (function (_super) {
     __extends(Mike, _super);
-    function Mike(Position, Velocity, team) {
-        return _super.call(this, Position, Velocity, 6, 1000, 20, 40, team) || this;
+    function Mike(team) {
+        return _super.call(this, 6, 1000, 20, 40, team) || this;
     }
     Mike.prototype.draw = function () {
         if (this.respawnTimer > 1) {
             return;
         }
-        context.fillStyle = "blue";
+        // Draws the character
+        context.fillStyle = this.team == 0 ? "blue" : "red";
         context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
+        context.fillStyle = "yellow";
+        context.fillRect(this.Position[0] + 2, this.Position[1] + 2, this.width - 4, this.height - 4);
     };
     Mike.prototype.update = function () {
-        if (this.respawnTimer > 1) {
-            this.respawnTimer--;
+        if (!this.tryRespawn())
             return;
-        }
-        if (this.respawnTimer == 1)
-            this.respawn();
         if (this.cooldownTimer > 0)
             this.cooldownTimer--;
     };
@@ -397,8 +472,8 @@ var Mike = /** @class */ (function (_super) {
 }(Character));
 var Bill = /** @class */ (function (_super) {
     __extends(Bill, _super);
-    function Bill(Position, Velocity, team) {
-        var _this = _super.call(this, Position, Velocity, 8, 1000, 20, 40, team) || this;
+    function Bill(team) {
+        var _this = _super.call(this, 8, 1000, 20, 40, team) || this;
         _this.attackRadius = 100;
         return _this;
     }
@@ -406,16 +481,15 @@ var Bill = /** @class */ (function (_super) {
         if (this.respawnTimer > 1) {
             return;
         }
-        context.fillStyle = "green";
+        // Draws the character
+        context.fillStyle = this.team == 0 ? "blue" : "red";
         context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
+        context.fillStyle = "green";
+        context.fillRect(this.Position[0] + 2, this.Position[1] + 2, this.width - 4, this.height - 4);
     };
     Bill.prototype.update = function () {
-        if (this.respawnTimer > 1) {
-            this.respawnTimer--;
+        if (!this.tryRespawn())
             return;
-        }
-        if (this.respawnTimer == 1)
-            this.respawn();
         if (this.cooldownTimer > 0)
             this.cooldownTimer--;
     };
@@ -449,6 +523,59 @@ var Bill = /** @class */ (function (_super) {
     };
     return Bill;
 }(Character));
+var Esteban = /** @class */ (function (_super) {
+    __extends(Esteban, _super);
+    function Esteban(team) {
+        var _this = _super.call(this, 4, 1000, 20, 40, team) || this;
+        _this.Arrows = [];
+        _this.maxTime = 1000; // Time until full distance/min spread shot in milliseconds
+        _this.arrowInfo = {
+            distance: 1000,
+            travelTime: _this.maxTime * (frameRate / 1000),
+        };
+        return _this;
+    }
+    Esteban.prototype.draw = function () {
+        for (var _i = 0, _a = this.Arrows; _i < _a.length; _i++) {
+            var arrow = _a[_i];
+            arrow.draw();
+        }
+        if (this.respawnTimer > 1) {
+            return;
+        }
+        // Draws the character
+        context.fillStyle = this.team == 0 ? "blue" : "red";
+        context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
+        context.fillStyle = "pink";
+        context.fillRect(this.Position[0] + 2, this.Position[1] + 2, this.width - 4, this.height - 4);
+    };
+    Esteban.prototype.update = function () {
+        for (var _i = 0, _a = this.Arrows; _i < _a.length; _i++) {
+            var arrow = _a[_i];
+            arrow.update();
+            if (arrow.maxDistance <= 0)
+                this.Arrows.splice(this.Arrows.indexOf(arrow), 1);
+        }
+        if (!this.tryRespawn())
+            return;
+        if (this.cooldownTimer > 0)
+            this.cooldownTimer--;
+    };
+    Esteban.prototype.attack = function () {
+        this.cooldownTimer = this.cooldown;
+        var theta = Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0]);
+        var arrow = new Arrow([this.Position[0] + this.width / 2, this.Position[1] + this.height / 2], [this.arrowInfo.distance * Math.cos(theta) / this.arrowInfo.travelTime, this.arrowInfo.distance * Math.sin(theta) / this.arrowInfo.travelTime], this.team, this.arrowInfo.distance);
+        this.Arrows.push(arrow);
+    };
+    Esteban.prototype.drawAttackPreview = function () {
+        context.fillStyle = attackPreviewStyle;
+        context.beginPath();
+        context.moveTo(this.Position[0] + this.width / 2, this.Position[1] + this.height / 2);
+        context.lineTo(this.Position[0] + this.width / 2 + this.arrowInfo.distance * Math.cos(Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0])), this.Position[1] + this.height / 2 + this.arrowInfo.distance * Math.sin(Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0])));
+        context.stroke();
+    };
+    return Esteban;
+}(Character));
 // Initiate canvas
 var canvas = document.getElementById("canvas");
 var context = canvas.getContext("2d");
@@ -460,11 +587,16 @@ var debugOutput2 = document.getElementById("debug2");
 // Define global variables
 var frameRate = 60;
 var state = "playing";
-var attackPreviewStyle = "rgba(255, 255, 255, 0.1)";
+var attackPreviewStyle = "rgba(0, 0, 0, 0.1)";
 // Define global arrays
 var Gamepads = [];
 var Players = [new Player(0), new Player(1)];
 var Objects = [new Box([window.innerWidth / 2 - 250, window.innerHeight / 2 - 50], 100, 100), new Box([window.innerWidth / 2 + 150, window.innerHeight / 2 - 50], 100, 100)];
+// Add walls
+Objects.push(new Box([0, -5], window.innerWidth, 10));
+Objects.push(new Box([-5, 0], 10, window.innerHeight));
+Objects.push(new Box([0, window.innerHeight - 5], window.innerWidth, 10));
+Objects.push(new Box([window.innerWidth - 5, 0], 10, window.innerHeight));
 reset();
 // Handle controllers (this isn't actually used since the controllers are queried every frame, but it might be helpful later)
 window.addEventListener("gamepadconnected", function (e) { gamepadHandler(e, true); }, false);
@@ -520,8 +652,8 @@ function update() {
         var player = Players_2[_i];
         player.update();
     }
-    for (var _a = 0, Objects_4 = Objects; _a < Objects_4.length; _a++) {
-        var object = Objects_4[_a];
+    for (var _a = 0, Objects_5 = Objects; _a < Objects_5.length; _a++) {
+        var object = Objects_5[_a];
         object.update();
     }
 }
@@ -531,8 +663,8 @@ function draw() {
         var player = Players_3[_i];
         player.draw();
     }
-    for (var _a = 0, Objects_5 = Objects; _a < Objects_5.length; _a++) {
-        var object = Objects_5[_a];
+    for (var _a = 0, Objects_6 = Objects; _a < Objects_6.length; _a++) {
+        var object = Objects_6[_a];
         object.draw();
     }
 }
@@ -591,6 +723,10 @@ function debug() {
     debugOutput1.innerText = buttonOutput;
 }
 function clearCanvas() {
-    context.fillStyle = 'rgba(0, 0, 0)';
+    context.fillStyle = 'rgba(255, 255, 255)';
     context.fillRect(0, 0, canvas.width, canvas.height);
+}
+function loadImages() {
+    var Esteban = new Image();
+    Esteban.src = "../../../assets/textures/characters/Esteban.png";
 }
