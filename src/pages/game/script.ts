@@ -51,13 +51,13 @@ class Player {
         this.Buttons.rightStick = [gamepad.axes[2], gamepad.axes[3]];
 
         // Try to avoid drift by cutting off small values
-        if(Math.sqrt(Math.pow(this.Buttons.leftStick[0], 2) + Math.pow(this.Buttons.leftStick[1], 2)) < 0.2) {
-        if (Math.abs(this.Buttons.leftStick[0]) < 0.2) this.Buttons.leftStick[0] = 0;
-        if (Math.abs(this.Buttons.leftStick[1]) < 0.2) this.Buttons.leftStick[1] = 0;
+        if (Math.sqrt(Math.pow(this.Buttons.leftStick[0], 2) + Math.pow(this.Buttons.leftStick[1], 2)) < 0.2) {
+            if (Math.abs(this.Buttons.leftStick[0]) < 0.2) this.Buttons.leftStick[0] = 0;
+            if (Math.abs(this.Buttons.leftStick[1]) < 0.2) this.Buttons.leftStick[1] = 0;
         }
-        if(Math.sqrt(Math.pow(this.Buttons.rightStick[0], 2) + Math.pow(this.Buttons.rightStick[1], 2)) < 0.2) {
-        if (Math.abs(this.Buttons.rightStick[0]) < 0.2) this.Buttons.rightStick[0] = 0;
-        if (Math.abs(this.Buttons.rightStick[1]) < 0.2) this.Buttons.rightStick[1] = 0;
+        if (Math.sqrt(Math.pow(this.Buttons.rightStick[0], 2) + Math.pow(this.Buttons.rightStick[1], 2)) < 0.2) {
+            if (Math.abs(this.Buttons.rightStick[0]) < 0.2) this.Buttons.rightStick[0] = 0;
+            if (Math.abs(this.Buttons.rightStick[1]) < 0.2) this.Buttons.rightStick[1] = 0;
         }
     }
 
@@ -114,8 +114,22 @@ class Player {
 
         if (state == "playing") this.checkButtons(Gamepads[this.controllerNumber]);
 
+
+        // Update character
+        if (this.Buttons.leftShoulder && !this.prevButtons.leftShoulder) this.selectedCharacter = (this.selectedCharacter + 5) % 3; // Adding 5 does the same thing as subtracting 1 conceptually, but subtracting 1 would actually cause the number to be negative
+        if (this.Buttons.rightShoulder && !this.prevButtons.rightShoulder) this.selectedCharacter = (this.selectedCharacter + 1) % 3;
+
+        // Do any other character updates
+        for (let i = 0; i < this.Characters.length; i++) {
+            this.Characters[i].update();
+        }
+
+        // Check if selected character is dead
+        if (this.Characters[0].respawnTimer > 0 && this.Characters[1].respawnTimer > 0 && this.Characters[2].respawnTimer > 0) return;
+        while (this.Characters[this.selectedCharacter].respawnTimer > 0) this.selectedCharacter = (this.selectedCharacter + 1) % 3;
+
         // Update holding time for attack button
-        this.attackHoldTime = (Math.abs(Math.sqrt(Math.pow(this.Buttons.rightStick[0], 2) + Math.pow(this.Buttons.rightStick[1], 2))) > 0.3) ? this.attackHoldTime + 1 : 0;
+        this.attackHoldTime = (this.Characters[this.selectedCharacter].cooldownTimer == 0 && Math.abs(Math.sqrt(Math.pow(this.Buttons.rightStick[0], 2) + Math.pow(this.Buttons.rightStick[1], 2))) > 0.3) ? this.attackHoldTime + 1 : 0;
 
         // If attack button is pressed, attack
         if (this.Buttons.rightTrigger && this.attackHoldTime > 0 && this.Characters[this.selectedCharacter].cooldownTimer == 0) {
@@ -123,33 +137,27 @@ class Player {
             this.attackHoldTime = 0;
         }
 
-        // Update character
-        if (this.Buttons.leftShoulder && !this.prevButtons.leftShoulder) this.selectedCharacter = (this.selectedCharacter + 5) % 3; // Adding 5 does the same thing as subtracting 1 conceptually, but subtracting 1 would actually cause the number to be negative
-        if (this.Buttons.rightShoulder && !this.prevButtons.rightShoulder) this.selectedCharacter = (this.selectedCharacter + 1) % 3;
-
         // Update character velocity
         this.Characters[this.selectedCharacter].move(this.Buttons.leftStick) // If character is selected, set its velocity based on left stick. 
-
-        // Do any other character updates
-        for (let i = 0; i < this.Characters.length; i++) {
-            this.Characters[i].update();
-        }
-
 
     }
 
     draw() {
-
-        if (this.attackHoldTime > 0) {
+        if (this.attackHoldTime > 0 && this.Characters[this.selectedCharacter].cooldownTimer == 0 && this.Characters[this.selectedCharacter].respawnTimer == 0) {
             this.Characters[this.selectedCharacter].drawAttackPreview();
         }
 
         for (let character of this.Characters) {
-            character.draw();
+          character.draw();
         }
-
-        
     }
+
+    resetCharacters() {
+        for (let character of this.Characters) {
+            character.respawn();
+        }
+    }
+
 }
 
 // 
@@ -230,7 +238,7 @@ class ShotgunBullet extends Bullet {
         }
 
         for (let character of Players[(this.team + 1) % 2].Characters) {
-            if (this.checkCollision(character)) {
+            if (character.respawnTimer == 0 && this.checkCollision(character)) {
                 character.die();
                 this.maxDistance = 0;
                 return;
@@ -257,6 +265,9 @@ abstract class Character extends GameObject {
     width: number;
     height: number;
     team: number;
+    respawnTime: number = 3000 * (frameRate / 1000);
+    respawnTimer: number = 0;
+    hasBall: boolean = false;
 
     constructor(Position: [number, number], Velocity: [number, number], speedScalar: number, cooldown: number, width: number, height: number, team: number) {
         super(Position, Velocity);
@@ -314,32 +325,46 @@ abstract class Character extends GameObject {
 
     abstract drawAttackPreview(): void;
 
-    abstract die(): void;
+    die(): void {
+        this.respawnTimer = this.respawnTime;
+    }
+
+    respawn(): void {
+        this.respawnTimer = 0;
+
+
+        for (let j = 0; j < Players[this.team].Characters.length; j++) {
+            if (Players[this.team].Characters[j] == this) {
+                this.Position = [50 + (-100 * this.team) - (this.width * this.team) + (window.innerWidth * this.team), window.innerHeight / 2 - this.height / 2 + 3 * (j - 1) * this.height];
+                return;
+            }
+        }
+    }
 }
+
 
 class Shelly extends Character {
 
     Bullets: Array<ShotgunBullet> = []
     bulletInfo: {
-        minVelocity: number,
-        maxVelocity: number,
-        velocity: number,
+        minDistance: number,
+        maxDistance: number,
+        distance: number,
         bulletTravelTime: number,
         maxSpread: number,
         spreadDivisor: number,
         spread: number
     }
+
     bulletCount: number = 10;
-    maxTime: number = 2000; // Time until full distance/min spread shot in milliseconds
-
-
+    maxTime: number = 1000; // Time until full distance/min spread shot in milliseconds
 
     constructor(Position: [number, number], Velocity: [number, number], team: number) {
         super(Position, Velocity, 4, 1000, 20, 40, team);
         this.bulletInfo = {
-            minVelocity: 2,
-            maxVelocity: 10,
-            velocity: 10,
+            minDistance: 100,
+            maxDistance: 500,
+            distance: 10,
             bulletTravelTime: this.maxTime * (frameRate / 1000),
             maxSpread: Math.PI / 2,
             spreadDivisor: 8, // minSpread / maxSpread --> minSpread = maxSpread / spreadDivisor
@@ -348,54 +373,66 @@ class Shelly extends Character {
     }
 
     draw(): void {
-        context.fillStyle = "purple";
-        context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
-
         for (var bullet of this.Bullets) {
             bullet.draw();
         }
+
+        if (this.respawnTimer > 1) {
+            return;
+        }
+
+        context.fillStyle = "purple";
+        context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
+
+
     }
 
     update(): void {
-        if (this.cooldownTimer > 0) this.cooldownTimer--;
-
         for (var bullet of this.Bullets) {
             bullet.update();
             if (bullet.maxDistance <= 0) this.Bullets.splice(this.Bullets.indexOf(bullet), 1);
         }
 
+        if (this.respawnTimer > 1) {
+            this.respawnTimer--;
+            return;
+        }
+        if (this.respawnTimer == 1) this.respawn();
+        if (this.cooldownTimer > 0) this.cooldownTimer--;
+
+
+
         if (Players[this.team].attackHoldTime < (this.maxTime * (frameRate / 1000))) {
             this.bulletInfo.spread = this.bulletInfo.maxSpread / (1 + ((this.bulletInfo.spreadDivisor - 1) * Players[this.team].attackHoldTime / (this.maxTime * (frameRate / 1000))));
-            this.bulletInfo.velocity = this.bulletInfo.minVelocity + ((this.bulletInfo.maxVelocity - this.bulletInfo.minVelocity) * Players[this.team].attackHoldTime / (this.maxTime * (frameRate / 1000)));
+            this.bulletInfo.distance = this.bulletInfo.minDistance + ((this.bulletInfo.maxDistance - this.bulletInfo.minDistance) * Players[this.team].attackHoldTime / (this.maxTime * (frameRate / 1000)));
+        } else {
+            this.bulletInfo.spread = this.bulletInfo.maxSpread / this.bulletInfo.spreadDivisor;
+            this.bulletInfo.distance = this.bulletInfo.maxDistance;
         }
     }
 
     attack(): void {
         this.cooldownTimer = this.cooldown;
 
-
-
         let theta = Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0]);
 
 
         for (let i = 0; i < this.bulletCount; i++) {
             let newTheta = theta + (Math.random() - 0.5) * this.bulletInfo.spread;
-            var bullet = new ShotgunBullet([this.Position[0] + this.width / 2, this.Position[1] + this.height / 2], [this.bulletInfo.velocity * Math.cos(newTheta), this.bulletInfo.velocity * Math.sin(newTheta)], this.team, this.bulletInfo.bulletTravelTime * this.bulletInfo.velocity);
+            var bullet = new ShotgunBullet([this.Position[0] + this.width / 2, this.Position[1] + this.height / 2], [this.bulletInfo.distance * Math.cos(newTheta) / this.bulletInfo.bulletTravelTime, this.bulletInfo.distance * Math.sin(newTheta) / this.bulletInfo.bulletTravelTime], this.team, this.bulletInfo.distance);
             this.Bullets.push(bullet);
         }
     }
 
-    drawAttackPreview(): void { 
-        context.fillStyle = 'rgba(255, 255, 255, 0.1)';
+    drawAttackPreview(): void {
+        context.fillStyle = attackPreviewStyle;
         context.beginPath();
         context.moveTo(this.Position[0] + this.width / 2, this.Position[1] + this.height / 2);
-        context.lineTo(this.Position[0] + this.width / 2 + this.bulletInfo.velocity * Math.cos(Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0]) - (this.bulletInfo.spread/2)), this.Position[1] + this.height / 2 + this.bulletInfo.velocity * Math.sin(Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0]) - (this.bulletInfo.spread/2)));
-        context.arc(this.Position[0] + this.width / 2, this.Position[1] + this.height / 2, this.bulletInfo.velocity * this.bulletInfo.bulletTravelTime, Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0]) - (this.bulletInfo.spread/2), Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0]) + (this.bulletInfo.spread/2));
+        context.lineTo(this.Position[0] + this.width / 2 + this.bulletInfo.distance * Math.cos(Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0]) - (this.bulletInfo.spread)), this.Position[1] + this.height / 2 + this.bulletInfo.distance * Math.sin(Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0]) - (this.bulletInfo.spread)));
+        context.arc(this.Position[0] + this.width / 2, this.Position[1] + this.height / 2, this.bulletInfo.distance, Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0]) - (this.bulletInfo.spread), Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0]) + (this.bulletInfo.spread));
         context.lineTo(this.Position[0] + this.width / 2, this.Position[1] + this.height / 2);
         context.fill();
     }
-
-    die(): void { }
 }
 
 class Mike extends Character {
@@ -403,39 +440,87 @@ class Mike extends Character {
     constructor(Position: [number, number], Velocity: [number, number], team: number) {
         super(Position, Velocity, 6, 1000, 20, 40, team);
     }
+
     draw(): void {
+        if (this.respawnTimer > 1) {
+            return;
+        }
+
         context.fillStyle = "blue";
         context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
     }
 
-    update(): void { };
+    update(): void {
+        if (this.respawnTimer > 1) {
+            this.respawnTimer--;
+            return;
+        }
+        if (this.respawnTimer == 1) this.respawn();
+        if (this.cooldownTimer > 0) this.cooldownTimer--;
+
+    };
 
     attack(): void { };
 
     drawAttackPreview(): void { }
-
-    die(): void {
-        console.log("Mike died");
-    };
 }
 
 class Bill extends Character {
+    attackRadius: number = 100;
 
     constructor(Position: [number, number], Velocity: [number, number], team: number) {
         super(Position, Velocity, 8, 1000, 20, 40, team);
     }
     draw(): void {
+        if (this.respawnTimer > 1) {
+            return;
+        }
+
         context.fillStyle = "green";
         context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
     }
 
-    update(): void { };
+    update(): void {
+        if (this.respawnTimer > 1) {
+            this.respawnTimer--;
+            return;
+        }
+        if (this.respawnTimer == 1) this.respawn();
+        if (this.cooldownTimer > 0) this.cooldownTimer--;
+    }
 
-    attack(): void { };
+    attack(): void {
+        this.cooldownTimer = this.cooldown;
 
-    drawAttackPreview(): void { }
+        context.fillStyle = "red";
+        context.beginPath();
+        context.arc(this.Position[0] + this.width / 2, this.Position[1] + this.height / 2, this.attackRadius, 0, 2 * Math.PI);
+        context.fill();
 
-    die(): void { };
+        for (let character of Players[(this.team + 1) % 2].Characters) {
+            if (character.respawnTimer == 0 && this.checkDistance(character)) {
+                character.die();
+            }
+        }
+    }
+
+    drawAttackPreview(): void {
+        context.fillStyle = attackPreviewStyle;
+        context.beginPath();
+        context.arc(this.Position[0] + this.width / 2, this.Position[1] + this.height / 2, this.attackRadius, 0, 2 * Math.PI);
+        context.fill();
+    }
+
+    checkDistance(character: Character): boolean {
+        let distanceTL = Math.sqrt(Math.pow(character.Position[0] - (this.Position[0] + this.width / 2), 2) + Math.pow(character.Position[1] - (this.Position[1] + this.height / 2), 2));
+        let distanceTR = Math.sqrt(Math.pow(character.Position[0] + character.width - (this.Position[0] + this.width / 2), 2) + Math.pow(character.Position[1] - (this.Position[1] + this.height / 2), 2));
+        let distanceBL = Math.sqrt(Math.pow(character.Position[0] - (this.Position[0] + this.width / 2), 2) + Math.pow(character.Position[1] + character.height - (this.Position[1] + this.height / 2), 2));
+        let distanceBR = Math.sqrt(Math.pow(character.Position[0] + character.width - (this.Position[0] + this.width / 2), 2) + Math.pow(character.Position[1] + character.height - (this.Position[1] + this.height / 2), 2));
+
+        if (distanceTL < this.attackRadius || distanceTR < this.attackRadius || distanceBL < this.attackRadius || distanceBR < this.attackRadius) return true;
+
+        return false;
+    }
 }
 
 // Initiate canvas
@@ -451,13 +536,14 @@ var debugOutput2 = document.getElementById("debug2");
 // Define global variables
 const frameRate = 60;
 var state = "playing";
+const attackPreviewStyle = "rgba(255, 255, 255, 0.1)";
 
 // Define global arrays
 var Gamepads: Array<Gamepad> = [];
 var Players: Array<Player> = [new Player(0), new Player(1)];
-var Objects: Array<CollidableObject> = [new Box([300, 300], 100, 100), new Box([500, 500], 100, 100)];
+var Objects: Array<CollidableObject> = [new Box([window.innerWidth / 2 - 250, window.innerHeight / 2 - 50], 100, 100), new Box([window.innerWidth / 2 + 150, window.innerHeight / 2 - 50], 100, 100)];
 
-
+reset();
 
 // Handle controllers (this isn't actually used since the controllers are queried every frame, but it might be helpful later)
 window.addEventListener("gamepadconnected", function (e) { gamepadHandler(e, true); }, false);
@@ -470,6 +556,11 @@ function gamepadHandler(event, connecting) {
 }
 
 
+function reset() {
+    for (let player of Players) {
+        player.resetCharacters();
+    }
+}
 
 
 // Start animation loop

@@ -100,32 +100,43 @@ var Player = /** @class */ (function () {
             this.prevButtons[button] = this.Buttons[button];
         if (state == "playing")
             this.checkButtons(Gamepads[this.controllerNumber]);
-        // Update holding time for attack button
-        this.attackHoldTime = (Math.abs(Math.sqrt(Math.pow(this.Buttons.rightStick[0], 2) + Math.pow(this.Buttons.rightStick[1], 2))) > 0.3) ? this.attackHoldTime + 1 : 0;
-        // If attack button is pressed, attack
-        if (this.Buttons.rightTrigger && this.attackHoldTime > 0 && this.Characters[this.selectedCharacter].cooldownTimer == 0) {
-            this.Characters[this.selectedCharacter].attack();
-            this.attackHoldTime = 0;
-        }
         // Update character
         if (this.Buttons.leftShoulder && !this.prevButtons.leftShoulder)
             this.selectedCharacter = (this.selectedCharacter + 5) % 3; // Adding 5 does the same thing as subtracting 1 conceptually, but subtracting 1 would actually cause the number to be negative
         if (this.Buttons.rightShoulder && !this.prevButtons.rightShoulder)
             this.selectedCharacter = (this.selectedCharacter + 1) % 3;
-        // Update character velocity
-        this.Characters[this.selectedCharacter].move(this.Buttons.leftStick); // If character is selected, set its velocity based on left stick. 
         // Do any other character updates
         for (var i = 0; i < this.Characters.length; i++) {
             this.Characters[i].update();
         }
+        // Check if selected character is dead
+        if (this.Characters[0].respawnTimer > 0 && this.Characters[1].respawnTimer > 0 && this.Characters[2].respawnTimer > 0)
+            return;
+        while (this.Characters[this.selectedCharacter].respawnTimer > 0)
+            this.selectedCharacter = (this.selectedCharacter + 1) % 3;
+        // Update holding time for attack button
+        this.attackHoldTime = (this.Characters[this.selectedCharacter].cooldownTimer == 0 && Math.abs(Math.sqrt(Math.pow(this.Buttons.rightStick[0], 2) + Math.pow(this.Buttons.rightStick[1], 2))) > 0.3) ? this.attackHoldTime + 1 : 0;
+        // If attack button is pressed, attack
+        if (this.Buttons.rightTrigger && this.attackHoldTime > 0 && this.Characters[this.selectedCharacter].cooldownTimer == 0) {
+            this.Characters[this.selectedCharacter].attack();
+            this.attackHoldTime = 0;
+        }
+        // Update character velocity
+        this.Characters[this.selectedCharacter].move(this.Buttons.leftStick); // If character is selected, set its velocity based on left stick. 
     };
     Player.prototype.draw = function () {
-        if (this.attackHoldTime > 0) {
+        if (this.attackHoldTime > 0 && this.Characters[this.selectedCharacter].cooldownTimer == 0 && this.Characters[this.selectedCharacter].respawnTimer == 0) {
             this.Characters[this.selectedCharacter].drawAttackPreview();
         }
         for (var _i = 0, _a = this.Characters; _i < _a.length; _i++) {
             var character = _a[_i];
             character.draw();
+        }
+    };
+    Player.prototype.resetCharacters = function () {
+        for (var _i = 0, _a = this.Characters; _i < _a.length; _i++) {
+            var character = _a[_i];
+            character.respawn();
         }
     };
     return Player;
@@ -199,7 +210,7 @@ var ShotgunBullet = /** @class */ (function (_super) {
         }
         for (var _a = 0, _b = Players[(this.team + 1) % 2].Characters; _a < _b.length; _a++) {
             var character = _b[_a];
-            if (this.checkCollision(character)) {
+            if (character.respawnTimer == 0 && this.checkCollision(character)) {
                 character.die();
                 this.maxDistance = 0;
                 return;
@@ -222,6 +233,9 @@ var Character = /** @class */ (function (_super) {
     function Character(Position, Velocity, speedScalar, cooldown, width, height, team) {
         var _this = _super.call(this, Position, Velocity) || this;
         _this.cooldownTimer = 0;
+        _this.respawnTime = 3000 * (frameRate / 1000);
+        _this.respawnTimer = 0;
+        _this.hasBall = false;
         _this.speedScalar = speedScalar;
         _this.width = width;
         _this.height = height;
@@ -266,6 +280,18 @@ var Character = /** @class */ (function (_super) {
             }
         }
     };
+    Character.prototype.die = function () {
+        this.respawnTimer = this.respawnTime;
+    };
+    Character.prototype.respawn = function () {
+        this.respawnTimer = 0;
+        for (var j = 0; j < Players[this.team].Characters.length; j++) {
+            if (Players[this.team].Characters[j] == this) {
+                this.Position = [50 + (-100 * this.team) - (this.width * this.team) + (window.innerWidth * this.team), window.innerHeight / 2 - this.height / 2 + 3 * (j - 1) * this.height];
+                return;
+            }
+        }
+    };
     return Character;
 }(GameObject));
 var Shelly = /** @class */ (function (_super) {
@@ -274,11 +300,11 @@ var Shelly = /** @class */ (function (_super) {
         var _this = _super.call(this, Position, Velocity, 4, 1000, 20, 40, team) || this;
         _this.Bullets = [];
         _this.bulletCount = 10;
-        _this.maxTime = 2000; // Time until full distance/min spread shot in milliseconds
+        _this.maxTime = 1000; // Time until full distance/min spread shot in milliseconds
         _this.bulletInfo = {
-            minVelocity: 2,
-            maxVelocity: 10,
-            velocity: 10,
+            minDistance: 100,
+            maxDistance: 500,
+            distance: 10,
             bulletTravelTime: _this.maxTime * (frameRate / 1000),
             maxSpread: Math.PI / 2,
             spreadDivisor: 8,
@@ -287,25 +313,38 @@ var Shelly = /** @class */ (function (_super) {
         return _this;
     }
     Shelly.prototype.draw = function () {
-        context.fillStyle = "purple";
-        context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
         for (var _i = 0, _a = this.Bullets; _i < _a.length; _i++) {
             var bullet = _a[_i];
             bullet.draw();
         }
+        if (this.respawnTimer > 1) {
+            return;
+        }
+        context.fillStyle = "purple";
+        context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
     };
     Shelly.prototype.update = function () {
-        if (this.cooldownTimer > 0)
-            this.cooldownTimer--;
         for (var _i = 0, _a = this.Bullets; _i < _a.length; _i++) {
             var bullet = _a[_i];
             bullet.update();
             if (bullet.maxDistance <= 0)
                 this.Bullets.splice(this.Bullets.indexOf(bullet), 1);
         }
+        if (this.respawnTimer > 1) {
+            this.respawnTimer--;
+            return;
+        }
+        if (this.respawnTimer == 1)
+            this.respawn();
+        if (this.cooldownTimer > 0)
+            this.cooldownTimer--;
         if (Players[this.team].attackHoldTime < (this.maxTime * (frameRate / 1000))) {
             this.bulletInfo.spread = this.bulletInfo.maxSpread / (1 + ((this.bulletInfo.spreadDivisor - 1) * Players[this.team].attackHoldTime / (this.maxTime * (frameRate / 1000))));
-            this.bulletInfo.velocity = this.bulletInfo.minVelocity + ((this.bulletInfo.maxVelocity - this.bulletInfo.minVelocity) * Players[this.team].attackHoldTime / (this.maxTime * (frameRate / 1000)));
+            this.bulletInfo.distance = this.bulletInfo.minDistance + ((this.bulletInfo.maxDistance - this.bulletInfo.minDistance) * Players[this.team].attackHoldTime / (this.maxTime * (frameRate / 1000)));
+        }
+        else {
+            this.bulletInfo.spread = this.bulletInfo.maxSpread / this.bulletInfo.spreadDivisor;
+            this.bulletInfo.distance = this.bulletInfo.maxDistance;
         }
     };
     Shelly.prototype.attack = function () {
@@ -313,20 +352,19 @@ var Shelly = /** @class */ (function (_super) {
         var theta = Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0]);
         for (var i = 0; i < this.bulletCount; i++) {
             var newTheta = theta + (Math.random() - 0.5) * this.bulletInfo.spread;
-            var bullet = new ShotgunBullet([this.Position[0] + this.width / 2, this.Position[1] + this.height / 2], [this.bulletInfo.velocity * Math.cos(newTheta), this.bulletInfo.velocity * Math.sin(newTheta)], this.team, this.bulletInfo.bulletTravelTime * this.bulletInfo.velocity);
+            var bullet = new ShotgunBullet([this.Position[0] + this.width / 2, this.Position[1] + this.height / 2], [this.bulletInfo.distance * Math.cos(newTheta) / this.bulletInfo.bulletTravelTime, this.bulletInfo.distance * Math.sin(newTheta) / this.bulletInfo.bulletTravelTime], this.team, this.bulletInfo.distance);
             this.Bullets.push(bullet);
         }
     };
     Shelly.prototype.drawAttackPreview = function () {
-        context.fillStyle = 'rgba(255, 255, 255, 0.1)';
+        context.fillStyle = attackPreviewStyle;
         context.beginPath();
         context.moveTo(this.Position[0] + this.width / 2, this.Position[1] + this.height / 2);
-        context.lineTo(this.Position[0] + this.width / 2 + this.bulletInfo.velocity * Math.cos(Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0]) - (this.bulletInfo.spread / 2)), this.Position[1] + this.height / 2 + this.bulletInfo.velocity * Math.sin(Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0]) - (this.bulletInfo.spread / 2)));
-        context.arc(this.Position[0] + this.width / 2, this.Position[1] + this.height / 2, this.bulletInfo.velocity * this.bulletInfo.bulletTravelTime, Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0]) - (this.bulletInfo.spread / 2), Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0]) + (this.bulletInfo.spread / 2));
+        context.lineTo(this.Position[0] + this.width / 2 + this.bulletInfo.distance * Math.cos(Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0]) - (this.bulletInfo.spread)), this.Position[1] + this.height / 2 + this.bulletInfo.distance * Math.sin(Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0]) - (this.bulletInfo.spread)));
+        context.arc(this.Position[0] + this.width / 2, this.Position[1] + this.height / 2, this.bulletInfo.distance, Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0]) - (this.bulletInfo.spread), Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0]) + (this.bulletInfo.spread));
         context.lineTo(this.Position[0] + this.width / 2, this.Position[1] + this.height / 2);
         context.fill();
     };
-    Shelly.prototype.die = function () { };
     return Shelly;
 }(Character));
 var Mike = /** @class */ (function (_super) {
@@ -335,36 +373,80 @@ var Mike = /** @class */ (function (_super) {
         return _super.call(this, Position, Velocity, 6, 1000, 20, 40, team) || this;
     }
     Mike.prototype.draw = function () {
+        if (this.respawnTimer > 1) {
+            return;
+        }
         context.fillStyle = "blue";
         context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
     };
-    Mike.prototype.update = function () { };
+    Mike.prototype.update = function () {
+        if (this.respawnTimer > 1) {
+            this.respawnTimer--;
+            return;
+        }
+        if (this.respawnTimer == 1)
+            this.respawn();
+        if (this.cooldownTimer > 0)
+            this.cooldownTimer--;
+    };
     ;
     Mike.prototype.attack = function () { };
     ;
     Mike.prototype.drawAttackPreview = function () { };
-    Mike.prototype.die = function () {
-        console.log("Mike died");
-    };
-    ;
     return Mike;
 }(Character));
 var Bill = /** @class */ (function (_super) {
     __extends(Bill, _super);
     function Bill(Position, Velocity, team) {
-        return _super.call(this, Position, Velocity, 8, 1000, 20, 40, team) || this;
+        var _this = _super.call(this, Position, Velocity, 8, 1000, 20, 40, team) || this;
+        _this.attackRadius = 100;
+        return _this;
     }
     Bill.prototype.draw = function () {
+        if (this.respawnTimer > 1) {
+            return;
+        }
         context.fillStyle = "green";
         context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
     };
-    Bill.prototype.update = function () { };
-    ;
-    Bill.prototype.attack = function () { };
-    ;
-    Bill.prototype.drawAttackPreview = function () { };
-    Bill.prototype.die = function () { };
-    ;
+    Bill.prototype.update = function () {
+        if (this.respawnTimer > 1) {
+            this.respawnTimer--;
+            return;
+        }
+        if (this.respawnTimer == 1)
+            this.respawn();
+        if (this.cooldownTimer > 0)
+            this.cooldownTimer--;
+    };
+    Bill.prototype.attack = function () {
+        this.cooldownTimer = this.cooldown;
+        context.fillStyle = "red";
+        context.beginPath();
+        context.arc(this.Position[0] + this.width / 2, this.Position[1] + this.height / 2, this.attackRadius, 0, 2 * Math.PI);
+        context.fill();
+        for (var _i = 0, _a = Players[(this.team + 1) % 2].Characters; _i < _a.length; _i++) {
+            var character = _a[_i];
+            if (character.respawnTimer == 0 && this.checkDistance(character)) {
+                character.die();
+            }
+        }
+    };
+    Bill.prototype.drawAttackPreview = function () {
+        context.fillStyle = attackPreviewStyle;
+        context.beginPath();
+        context.arc(this.Position[0] + this.width / 2, this.Position[1] + this.height / 2, this.attackRadius, 0, 2 * Math.PI);
+        context.fill();
+    };
+    Bill.prototype.checkDistance = function (character) {
+        var distanceTL = Math.sqrt(Math.pow(character.Position[0] - (this.Position[0] + this.width / 2), 2) + Math.pow(character.Position[1] - (this.Position[1] + this.height / 2), 2));
+        var distanceTR = Math.sqrt(Math.pow(character.Position[0] + character.width - (this.Position[0] + this.width / 2), 2) + Math.pow(character.Position[1] - (this.Position[1] + this.height / 2), 2));
+        var distanceBL = Math.sqrt(Math.pow(character.Position[0] - (this.Position[0] + this.width / 2), 2) + Math.pow(character.Position[1] + character.height - (this.Position[1] + this.height / 2), 2));
+        var distanceBR = Math.sqrt(Math.pow(character.Position[0] + character.width - (this.Position[0] + this.width / 2), 2) + Math.pow(character.Position[1] + character.height - (this.Position[1] + this.height / 2), 2));
+        if (distanceTL < this.attackRadius || distanceTR < this.attackRadius || distanceBL < this.attackRadius || distanceBR < this.attackRadius)
+            return true;
+        return false;
+    };
     return Bill;
 }(Character));
 // Initiate canvas
@@ -378,10 +460,12 @@ var debugOutput2 = document.getElementById("debug2");
 // Define global variables
 var frameRate = 60;
 var state = "playing";
+var attackPreviewStyle = "rgba(255, 255, 255, 0.1)";
 // Define global arrays
 var Gamepads = [];
 var Players = [new Player(0), new Player(1)];
-var Objects = [new Box([300, 300], 100, 100), new Box([500, 500], 100, 100)];
+var Objects = [new Box([window.innerWidth / 2 - 250, window.innerHeight / 2 - 50], 100, 100), new Box([window.innerWidth / 2 + 150, window.innerHeight / 2 - 50], 100, 100)];
+reset();
 // Handle controllers (this isn't actually used since the controllers are queried every frame, but it might be helpful later)
 window.addEventListener("gamepadconnected", function (e) { gamepadHandler(e, true); }, false);
 window.addEventListener("gamepaddisconnected", function (e) { gamepadHandler(e, false); }, false);
@@ -389,6 +473,12 @@ function gamepadHandler(event, connecting) {
     var gamepad = event.gamepad;
     // gamepad === navigator.getGamepads()[gamepad.index]
     console.log("Debug: Change with gamepad. Id: " + gamepad.id);
+}
+function reset() {
+    for (var _i = 0, Players_1 = Players; _i < Players_1.length; _i++) {
+        var player = Players_1[_i];
+        player.resetCharacters();
+    }
 }
 // Start animation loop
 setInterval(animate, 1000 / frameRate);
@@ -426,8 +516,8 @@ function querryControllers() {
     }
 }
 function update() {
-    for (var _i = 0, Players_1 = Players; _i < Players_1.length; _i++) {
-        var player = Players_1[_i];
+    for (var _i = 0, Players_2 = Players; _i < Players_2.length; _i++) {
+        var player = Players_2[_i];
         player.update();
     }
     for (var _a = 0, Objects_4 = Objects; _a < Objects_4.length; _a++) {
@@ -437,8 +527,8 @@ function update() {
 }
 function draw() {
     clearCanvas();
-    for (var _i = 0, Players_2 = Players; _i < Players_2.length; _i++) {
-        var player = Players_2[_i];
+    for (var _i = 0, Players_3 = Players; _i < Players_3.length; _i++) {
+        var player = Players_3[_i];
         player.draw();
     }
     for (var _a = 0, Objects_5 = Objects; _a < Objects_5.length; _a++) {
