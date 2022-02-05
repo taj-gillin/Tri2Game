@@ -116,8 +116,16 @@ class Player {
 
 
         // Update character
-        if (this.Buttons.leftShoulder && !this.prevButtons.leftShoulder) this.selectedCharacter = (this.selectedCharacter + 5) % 3; // Adding 5 does the same thing as subtracting 1 conceptually, but subtracting 1 would actually cause the number to be negative
-        if (this.Buttons.rightShoulder && !this.prevButtons.rightShoulder) this.selectedCharacter = (this.selectedCharacter + 1) % 3;
+        if (this.Buttons.leftShoulder && !this.prevButtons.leftShoulder) {
+            this.selectedCharacter = (this.selectedCharacter + 5) % 3; // Adding 5 does the same thing as subtracting 1 conceptually, but subtracting 1 would actually cause the number to be negative
+            while (this.Characters[this.selectedCharacter].respawnTimer > 0) this.selectedCharacter = (this.selectedCharacter + 5) % 3;
+
+        }
+        if (this.Buttons.rightShoulder && !this.prevButtons.rightShoulder) {
+            this.selectedCharacter = (this.selectedCharacter + 1) % 3;
+            while (this.Characters[this.selectedCharacter].respawnTimer > 0) this.selectedCharacter = (this.selectedCharacter + 1) % 3;
+
+        }
 
         // Do any other character updates
         for (let i = 0; i < this.Characters.length; i++) {
@@ -126,7 +134,6 @@ class Player {
 
         // Check if selected character is dead
         if (this.Characters[0].respawnTimer > 0 && this.Characters[1].respawnTimer > 0 && this.Characters[2].respawnTimer > 0) return;
-        while (this.Characters[this.selectedCharacter].respawnTimer > 0) this.selectedCharacter = (this.selectedCharacter + 1) % 3;
 
         // Update holding time for attack button
         this.attackHoldTime = (this.Characters[this.selectedCharacter].cooldownTimer == 0 && Math.abs(Math.sqrt(Math.pow(this.Buttons.rightStick[0], 2) + Math.pow(this.Buttons.rightStick[1], 2))) > 0.3) ? this.attackHoldTime + 1 : 0;
@@ -139,7 +146,13 @@ class Player {
 
         // Update character velocity
         this.Characters[this.selectedCharacter].move(this.Buttons.leftStick) // If character is selected, set its velocity based on left stick. 
-
+        if (Math.abs(Math.sqrt(Math.pow(this.Buttons.leftStick[0], 2) + Math.pow(this.Buttons.leftStick[1], 2))) > 0.2) {
+            if (Math.abs(this.Buttons.leftStick[0]) > Math.abs(this.Buttons.leftStick[1])) {
+                this.Characters[this.selectedCharacter].direction = (this.Buttons.leftStick[0] > 0) ? "RIGHT" : "LEFT";
+            } else {
+                this.Characters[this.selectedCharacter].direction = (this.Buttons.leftStick[1] > 0) ? "DOWN" : "UP";
+            }
+        }
     }
 
     draw() {
@@ -313,20 +326,21 @@ abstract class Character extends GameObject {
     cooldown: number; // Entered as milliseconds
     cooldownTimer: number = 0;
     speedScalar: number;
-    width: number;
-    height: number;
+    width: number = 64;
+    height: number = 64
     team: number;
     respawnTime: number = 3000 * (frameRate / 1000);
     respawnTimer: number = 0;
     hasBall: boolean = false;
+    direction: "UP" | "DOWN" | "LEFT" | "RIGHT" = "DOWN";
+    frame = 0;
+    delay = 0;
 
-    
 
-    constructor(speedScalar: number, cooldown: number, width: number, height: number, team: number) {
-        super([-100,-100], [0,0]);
+
+    constructor(speedScalar: number, cooldown: number, team: number) {
+        super([-100, -100], [0, 0]);
         this.speedScalar = speedScalar;
-        this.width = width;
-        this.height = height;
         this.team = team;
         this.cooldown = Math.floor(cooldown * frameRate / 1000); // Converts from milliseconds to frames
     }
@@ -416,12 +430,31 @@ abstract class Character extends GameObject {
         // Left -- +1
         // Down -- +2
         // Right -- +3
+        let directionShift = 0;
+        switch (this.direction) {
+            case "UP":
+                directionShift = 0;
+                break;
+            case "LEFT":
+                directionShift = 1;
+                break;
+            case "DOWN":
+                directionShift = 2;
+                break;
+            case "RIGHT":
+                directionShift = 3;
+                break;
+        }
+
+        this.delay = (this.delay + 1) % 4;
+        if (this.delay == 0) this.frame++;
 
         // First, find right image
 
         // If this isn't the selected character, draw the idle image
-        if(Players[this.team].Characters[Players[this.team].selectedCharacter] != this) {
-            // context.drawImage(, this.Position[0], this.Position[1], this.width, this.height);
+        if (Players[this.team].Characters[Players[this.team].selectedCharacter] == this) {
+            this.frame %= 8;
+            context.drawImage(Images[character], this.width * this.frame, (8 + directionShift) * this.height, this.width, this.height, this.Position[0], this.Position[1], this.width, this.height);
             return;
         }
     }
@@ -444,7 +477,7 @@ class Shelly extends Character {
     maxTime: number = 1000; // Time until full distance/min spread shot in milliseconds
 
     constructor(team: number) {
-        super(4, 1000, 20, 40, team);
+        super(4, 1000, team);
         this.bulletInfo = {
             minDistance: 100,
             maxDistance: 500,
@@ -519,7 +552,7 @@ class Shelly extends Character {
 class Mike extends Character {
 
     constructor(team: number) {
-        super(6, 1000, 20, 40, team);
+        super(6, 1000, team);
     }
 
     draw(): void {
@@ -550,7 +583,7 @@ class Bill extends Character {
     attackRadius: number = 100;
 
     constructor(team: number) {
-        super(8, 1000, 20, 40, team);
+        super(8, 1000, team);
     }
     draw(): void {
         if (this.respawnTimer > 1) {
@@ -614,7 +647,7 @@ class Esteban extends Character {
     maxTime: number = 1000; // Time until full distance/min spread shot in milliseconds
 
     constructor(team: number) {
-        super(4, 1000, 20, 40, team);
+        super(4, 1000, team);
         this.arrowInfo = {
             distance: 1000,
             travelTime: this.maxTime * (frameRate / 1000),
@@ -635,6 +668,8 @@ class Esteban extends Character {
         context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
         context.fillStyle = "pink";
         context.fillRect(this.Position[0] + 2, this.Position[1] + 2, this.width - 4, this.height - 4);
+
+        this.drawCharacter("Esteban")
 
     }
 
@@ -844,9 +879,10 @@ function clearCanvas() {
     context.fillRect(0, 0, canvas.width, canvas.height);
 }
 
-function loadImages(){
-    const Esteban = new Image();
-    Esteban.src = "../../../assets/textures/characters/Esteban.png";
 
 
-}
+const Images: { [key: string]: HTMLImageElement } = {
+    "Esteban": new Image(),
+};
+
+Images["Esteban"].src = "../../../assets/textures/characters/Esteban.png";
