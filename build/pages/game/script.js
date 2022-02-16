@@ -101,16 +101,12 @@ var Player = /** @class */ (function () {
         if (state == "playing")
             this.checkButtons(Gamepads[this.controllerNumber]);
         // Update character
-        if (this.Buttons.leftShoulder && !this.prevButtons.leftShoulder) {
-            this.selectedCharacter = (this.selectedCharacter + 5) % 3; // Adding 5 does the same thing as subtracting 1 conceptually, but subtracting 1 would actually cause the number to be negative
-            while (this.Characters[this.selectedCharacter].respawnTimer > 0)
-                this.selectedCharacter = (this.selectedCharacter + 5) % 3;
-        }
-        if (this.Buttons.rightShoulder && !this.prevButtons.rightShoulder) {
-            this.selectedCharacter = (this.selectedCharacter + 1) % 3;
-            while (this.Characters[this.selectedCharacter].respawnTimer > 0)
-                this.selectedCharacter = (this.selectedCharacter + 1) % 3;
-        }
+        if (this.Buttons.leftShoulder && !this.prevButtons.leftShoulder)
+            this.changeCharacterLeft();
+        if (this.Buttons.rightShoulder && !this.prevButtons.rightShoulder)
+            this.changeCharacterRight();
+        if (this.Characters[this.selectedCharacter].respawnTimer > 0)
+            this.changeCharacterRight();
         // Do any other character updates
         for (var i = 0; i < this.Characters.length; i++) {
             this.Characters[i].update();
@@ -126,13 +122,32 @@ var Player = /** @class */ (function () {
             this.attackHoldTime = 0;
         }
         // Update character velocity
-        this.Characters[this.selectedCharacter].move(this.Buttons.leftStick); // If character is selected, set its velocity based on left stick. 
-        if (Math.abs(Math.sqrt(Math.pow(this.Buttons.leftStick[0], 2) + Math.pow(this.Buttons.leftStick[1], 2))) > 0.2) {
-            if (Math.abs(this.Buttons.leftStick[0]) > Math.abs(this.Buttons.leftStick[1])) {
-                this.Characters[this.selectedCharacter].direction = (this.Buttons.leftStick[0] > 0) ? "RIGHT" : "LEFT";
+        // First, set all to zero (used for animations)
+        for (var _i = 0, _a = this.Characters; _i < _a.length; _i++) {
+            var character = _a[_i];
+            character.Velocity = [0, 0];
+        }
+        // Then, add in the movement from the left stick
+        if (Math.abs(Math.sqrt(Math.pow(this.Buttons.leftStick[0], 2) + Math.pow(this.Buttons.leftStick[1], 2))) > 0.2) { // Check if the left stick is moved (minimum set to ignore controller drift)
+            if (Math.abs(this.Buttons.leftStick[0]) > Math.abs(this.Buttons.leftStick[1])) { // Check if the left stick is moved horizontally more than vertically
+                if (this.Buttons.leftStick[0] > 0) { // If so, check if the left stick is moved right
+                    this.Characters[this.selectedCharacter].move([1, 0]);
+                    this.Characters[this.selectedCharacter].direction = "RIGHT";
+                }
+                else { // This means the left stick is moved left
+                    this.Characters[this.selectedCharacter].move([-1, 0]);
+                    this.Characters[this.selectedCharacter].direction = "LEFT";
+                }
             }
-            else {
-                this.Characters[this.selectedCharacter].direction = (this.Buttons.leftStick[1] > 0) ? "DOWN" : "UP";
+            else { // This means the left stick is moved vertically
+                if (this.Buttons.leftStick[1] > 0) { // Check if the left stick is moved down
+                    this.Characters[this.selectedCharacter].move([0, 1]);
+                    this.Characters[this.selectedCharacter].direction = "DOWN";
+                }
+                else { // This means the left stick is moved up
+                    this.Characters[this.selectedCharacter].move([0, -1]);
+                    this.Characters[this.selectedCharacter].direction = "UP";
+                }
             }
         }
     };
@@ -144,11 +159,39 @@ var Player = /** @class */ (function () {
             var character = _a[_i];
             character.draw();
         }
+        // Draw character selection
+        if (this.Characters[this.selectedCharacter].respawnTimer == 0) {
+            var selected = this.Characters[this.selectedCharacter];
+            context.beginPath();
+            context.moveTo(selected.Position[0] + selected.width / 2 - 12, selected.Position[1] - 16);
+            context.lineTo(selected.Position[0] + selected.width / 2, selected.Position[1] - 8);
+            context.lineTo(selected.Position[0] + selected.width / 2 + 12, selected.Position[1] - 16);
+            context.closePath();
+            context.lineWidth = 2;
+            context.strokeStyle = "black";
+            context.stroke();
+            context.fillStyle = this.controllerNumber == 0 ? "blue" : "red";
+            context.fill();
+        }
     };
     Player.prototype.resetCharacters = function () {
         for (var _i = 0, _a = this.Characters; _i < _a.length; _i++) {
             var character = _a[_i];
             character.respawn();
+        }
+    };
+    Player.prototype.changeCharacterRight = function () {
+        for (var i = 0; i < this.Characters.length; i++) {
+            this.selectedCharacter = (this.selectedCharacter + 1) % 3;
+            if (this.Characters[this.selectedCharacter].respawnTimer == 0)
+                break;
+        }
+    };
+    Player.prototype.changeCharacterLeft = function () {
+        for (var i = 0; i < this.Characters.length; i++) {
+            this.selectedCharacter = (this.selectedCharacter + 5) % 3; // Adding 5 does the same thing as subtracting 1 conceptually, but subtracting 1 would actually cause the number to be negative
+            if (this.Characters[this.selectedCharacter].respawnTimer == 0)
+                break;
         }
     };
     return Player;
@@ -240,6 +283,48 @@ var ShotgunBullet = /** @class */ (function (_super) {
     };
     return ShotgunBullet;
 }(Bullet));
+var Bomb = /** @class */ (function (_super) {
+    __extends(Bomb, _super);
+    function Bomb(Position, team, radius) {
+        var _this = _super.call(this, Position, [0, 0], team) || this;
+        _this.timer = 2000 * (frameRate / 1000);
+        _this.radius = radius;
+        return _this;
+    }
+    Bomb.prototype.update = function () {
+        this.timer -= 1;
+        if (this.timer == 0)
+            this.explode();
+    };
+    Bomb.prototype.explode = function () {
+        for (var _i = 0, _a = Players[(this.team + 1) % 2].Characters; _i < _a.length; _i++) {
+            var character = _a[_i];
+            if (this.checkDistance(character)) {
+                character.die();
+            }
+        }
+    };
+    Bomb.prototype.draw = function () {
+        context.fillStyle = "black";
+        context.beginPath();
+        context.arc(this.Position[0], this.Position[1], 10, 0, 2 * Math.PI);
+        context.fill();
+        context.fillStyle = attackPreviewStyle;
+        context.beginPath();
+        context.arc(this.Position[0], this.Position[1], this.radius, 0, 2 * Math.PI);
+        context.fill();
+    };
+    Bomb.prototype.checkDistance = function (character) {
+        var distanceTL = Math.sqrt(Math.pow(character.Position[0] - (this.Position[0]), 2) + Math.pow(character.Position[1] - (this.Position[1]), 2));
+        var distanceTR = Math.sqrt(Math.pow(character.Position[0] + character.width - (this.Position[0]), 2) + Math.pow(character.Position[1] - (this.Position[1]), 2));
+        var distanceBL = Math.sqrt(Math.pow(character.Position[0] - (this.Position[0]), 2) + Math.pow(character.Position[1] + character.height - (this.Position[1]), 2));
+        var distanceBR = Math.sqrt(Math.pow(character.Position[0] + character.width - (this.Position[0]), 2) + Math.pow(character.Position[1] + character.height - (this.Position[1]), 2));
+        if (distanceTL < this.radius || distanceTR < this.radius || distanceBL < this.radius || distanceBR < this.radius)
+            return true;
+        return false;
+    };
+    return Bomb;
+}(Bullet));
 var Arrow = /** @class */ (function (_super) {
     __extends(Arrow, _super);
     function Arrow(Position, Velocity, team, maxDistance) {
@@ -293,14 +378,15 @@ var Character = /** @class */ (function (_super) {
     function Character(speedScalar, cooldown, team) {
         var _this = _super.call(this, [-100, -100], [0, 0]) || this;
         _this.cooldownTimer = 0;
-        _this.width = 64;
-        _this.height = 64;
+        _this.width = 32;
+        _this.height = 52;
         _this.respawnTime = 3000 * (frameRate / 1000);
         _this.respawnTimer = 0;
         _this.hasBall = false;
         _this.direction = "DOWN";
         _this.frame = 0;
         _this.delay = 0;
+        _this.spritePadding = { width: (64 - _this.width) / 2, height: (64 - _this.height) }; // This is used because the sprites are 64x64, but some of that is empty space used for larger animations and I don't want that. The width is what is cut off of both sides, the height is what is cut off of the top.
         _this.speedScalar = speedScalar;
         _this.team = team;
         _this.cooldown = Math.floor(cooldown * frameRate / 1000); // Converts from milliseconds to frames
@@ -392,16 +478,19 @@ var Character = /** @class */ (function (_super) {
                 directionShift = 3;
                 break;
         }
-        this.delay = (this.delay + 1) % 4;
-        if (this.delay == 0)
-            this.frame++;
-        // First, find right image
-        // If this isn't the selected character, draw the idle image
-        if (Players[this.team].Characters[Players[this.team].selectedCharacter] == this) {
+        if (Math.sqrt(Math.pow(this.Velocity[0], 2) + Math.pow(this.Velocity[1], 2)) > 0.1) { // If the character is moving
+            // Update frame
+            this.delay = (this.delay + 1) % 4;
+            if (this.delay == 0)
+                this.frame++;
             this.frame %= 8;
-            context.drawImage(Images[character], this.width * this.frame, (8 + directionShift) * this.height, this.width, this.height, this.Position[0], this.Position[1], this.width, this.height);
+            // Draw
+            context.drawImage(Images[character], (this.width + this.spritePadding.width * 2) * this.frame, (8 + directionShift) * (this.height + this.spritePadding.height), this.width + this.spritePadding.width * 2, this.height + this.spritePadding.height, this.Position[0] - this.spritePadding.width, this.Position[1] - this.spritePadding.height, this.width + this.spritePadding.width * 2, this.height + this.spritePadding.height);
             return;
         }
+        // Character is not moving
+        this.frame = 0;
+        context.drawImage(Images[character], (this.width + this.spritePadding.width * 2) * this.frame, (8 + directionShift) * (this.height + this.spritePadding.height), this.width + this.spritePadding.width * 2, this.height + this.spritePadding.height, this.Position[0] - this.spritePadding.width, this.Position[1] - this.spritePadding.height, this.width + this.spritePadding.width * 2, this.height + this.spritePadding.height);
     };
     return Character;
 }(GameObject));
@@ -413,8 +502,8 @@ var Shelly = /** @class */ (function (_super) {
         _this.bulletCount = 10;
         _this.maxTime = 1000; // Time until full distance/min spread shot in milliseconds
         _this.bulletInfo = {
-            minDistance: 100,
-            maxDistance: 500,
+            minDistance: 300,
+            maxDistance: 700,
             distance: 10,
             bulletTravelTime: _this.maxTime * (frameRate / 1000),
             maxSpread: Math.PI / 2,
@@ -431,11 +520,13 @@ var Shelly = /** @class */ (function (_super) {
         if (this.respawnTimer > 1) {
             return;
         }
+        // Draws the hitbox
+        // context.fillStyle = this.team == 0 ? "blue" : "red";
+        // context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
+        // context.fillStyle = "purple";
+        // context.fillRect(this.Position[0] + 2, this.Position[1] + 2, this.width - 4, this.height - 4);
         // Draws the character
-        context.fillStyle = this.team == 0 ? "blue" : "red";
-        context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
-        context.fillStyle = "purple";
-        context.fillRect(this.Position[0] + 2, this.Position[1] + 2, this.width - 4, this.height - 4);
+        this.drawCharacter("Shelly");
     };
     Shelly.prototype.update = function () {
         for (var _i = 0, _a = this.Bullets; _i < _a.length; _i++) {
@@ -486,11 +577,13 @@ var Mike = /** @class */ (function (_super) {
         if (this.respawnTimer > 1) {
             return;
         }
+        // Draws the hitbox
+        // context.fillStyle = this.team == 0 ? "blue" : "red";
+        // context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
+        // context.fillStyle = "yellow";
+        // context.fillRect(this.Position[0] + 2, this.Position[1] + 2, this.width - 4, this.height - 4);
         // Draws the character
-        context.fillStyle = this.team == 0 ? "blue" : "red";
-        context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
-        context.fillStyle = "yellow";
-        context.fillRect(this.Position[0] + 2, this.Position[1] + 2, this.width - 4, this.height - 4);
+        this.drawCharacter("Mike");
     };
     Mike.prototype.update = function () {
         if (!this.tryRespawn())
@@ -508,20 +601,33 @@ var Bill = /** @class */ (function (_super) {
     __extends(Bill, _super);
     function Bill(team) {
         var _this = _super.call(this, 8, 1000, team) || this;
+        _this.Bombs = [];
         _this.attackRadius = 100;
         return _this;
     }
     Bill.prototype.draw = function () {
+        for (var _i = 0, _a = this.Bombs; _i < _a.length; _i++) {
+            var bomb = _a[_i];
+            bomb.draw();
+        }
         if (this.respawnTimer > 1) {
             return;
         }
+        // Draws the hitbox
+        // context.fillStyle = this.team == 0 ? "blue" : "red";
+        // context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
+        // context.fillStyle = "green";
+        // context.fillRect(this.Position[0] + 2, this.Position[1] + 2, this.width - 4, this.height - 4);
         // Draws the character
-        context.fillStyle = this.team == 0 ? "blue" : "red";
-        context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
-        context.fillStyle = "green";
-        context.fillRect(this.Position[0] + 2, this.Position[1] + 2, this.width - 4, this.height - 4);
+        this.drawCharacter("Bill");
     };
     Bill.prototype.update = function () {
+        for (var _i = 0, _a = this.Bombs; _i < _a.length; _i++) {
+            var bomb = _a[_i];
+            bomb.update();
+            if (bomb.timer == 0)
+                this.Bombs.splice(this.Bombs.indexOf(bomb), 1);
+        }
         if (!this.tryRespawn())
             return;
         if (this.cooldownTimer > 0)
@@ -529,31 +635,13 @@ var Bill = /** @class */ (function (_super) {
     };
     Bill.prototype.attack = function () {
         this.cooldownTimer = this.cooldown;
-        context.fillStyle = "red";
-        context.beginPath();
-        context.arc(this.Position[0] + this.width / 2, this.Position[1] + this.height / 2, this.attackRadius, 0, 2 * Math.PI);
-        context.fill();
-        for (var _i = 0, _a = Players[(this.team + 1) % 2].Characters; _i < _a.length; _i++) {
-            var character = _a[_i];
-            if (character.respawnTimer == 0 && this.checkDistance(character)) {
-                character.die();
-            }
-        }
+        this.Bombs.push(new Bomb([this.Position[0] + this.width / 2, this.Position[1] + this.height / 2], this.team, this.attackRadius));
     };
     Bill.prototype.drawAttackPreview = function () {
         context.fillStyle = attackPreviewStyle;
         context.beginPath();
         context.arc(this.Position[0] + this.width / 2, this.Position[1] + this.height / 2, this.attackRadius, 0, 2 * Math.PI);
         context.fill();
-    };
-    Bill.prototype.checkDistance = function (character) {
-        var distanceTL = Math.sqrt(Math.pow(character.Position[0] - (this.Position[0] + this.width / 2), 2) + Math.pow(character.Position[1] - (this.Position[1] + this.height / 2), 2));
-        var distanceTR = Math.sqrt(Math.pow(character.Position[0] + character.width - (this.Position[0] + this.width / 2), 2) + Math.pow(character.Position[1] - (this.Position[1] + this.height / 2), 2));
-        var distanceBL = Math.sqrt(Math.pow(character.Position[0] - (this.Position[0] + this.width / 2), 2) + Math.pow(character.Position[1] + character.height - (this.Position[1] + this.height / 2), 2));
-        var distanceBR = Math.sqrt(Math.pow(character.Position[0] + character.width - (this.Position[0] + this.width / 2), 2) + Math.pow(character.Position[1] + character.height - (this.Position[1] + this.height / 2), 2));
-        if (distanceTL < this.attackRadius || distanceTR < this.attackRadius || distanceBL < this.attackRadius || distanceBR < this.attackRadius)
-            return true;
-        return false;
     };
     return Bill;
 }(Character));
@@ -562,9 +650,9 @@ var Esteban = /** @class */ (function (_super) {
     function Esteban(team) {
         var _this = _super.call(this, 4, 1000, team) || this;
         _this.Arrows = [];
-        _this.maxTime = 1000; // Time until full distance/min spread shot in milliseconds
+        _this.maxTime = 3 * (frameRate / 1000); // Time until full distance/min spread shot in milliseconds
         _this.arrowInfo = {
-            distance: 1000,
+            distance: 2000,
             travelTime: _this.maxTime * (frameRate / 1000),
         };
         return _this;
@@ -577,11 +665,12 @@ var Esteban = /** @class */ (function (_super) {
         if (this.respawnTimer > 1) {
             return;
         }
+        // Draws the hitbox
+        // context.fillStyle = this.team == 0 ? "blue" : "red";
+        // context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
+        // context.fillStyle = "pink";
+        // context.fillRect(this.Position[0] + 2, this.Position[1] + 2, this.width - 4, this.height - 4);
         // Draws the character
-        context.fillStyle = this.team == 0 ? "blue" : "red";
-        context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
-        context.fillStyle = "pink";
-        context.fillRect(this.Position[0] + 2, this.Position[1] + 2, this.width - 4, this.height - 4);
         this.drawCharacter("Esteban");
     };
     Esteban.prototype.update = function () {
@@ -763,5 +852,11 @@ function clearCanvas() {
 }
 var Images = {
     "Esteban": new Image(),
+    "Shelly": new Image(),
+    "Bill": new Image(),
+    "Mike": new Image(),
 };
 Images["Esteban"].src = "../../../assets/textures/characters/Esteban.png";
+Images["Shelly"].src = "../../../assets/textures/characters/Shelly.png";
+Images["Bill"].src = "../../../assets/textures/characters/Bill.png";
+Images["Mike"].src = "../../../assets/textures/characters/Mike.png";

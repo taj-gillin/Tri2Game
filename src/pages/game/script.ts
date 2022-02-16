@@ -116,16 +116,11 @@ class Player {
 
 
         // Update character
-        if (this.Buttons.leftShoulder && !this.prevButtons.leftShoulder) {
-            this.selectedCharacter = (this.selectedCharacter + 5) % 3; // Adding 5 does the same thing as subtracting 1 conceptually, but subtracting 1 would actually cause the number to be negative
-            while (this.Characters[this.selectedCharacter].respawnTimer > 0) this.selectedCharacter = (this.selectedCharacter + 5) % 3;
+        if (this.Buttons.leftShoulder && !this.prevButtons.leftShoulder) this.changeCharacterLeft();
+        if (this.Buttons.rightShoulder && !this.prevButtons.rightShoulder) this.changeCharacterRight();
+    
 
-        }
-        if (this.Buttons.rightShoulder && !this.prevButtons.rightShoulder) {
-            this.selectedCharacter = (this.selectedCharacter + 1) % 3;
-            while (this.Characters[this.selectedCharacter].respawnTimer > 0) this.selectedCharacter = (this.selectedCharacter + 1) % 3;
-
-        }
+        if(this.Characters[this.selectedCharacter].respawnTimer > 0) this.changeCharacterRight();
 
         // Do any other character updates
         for (let i = 0; i < this.Characters.length; i++) {
@@ -145,12 +140,28 @@ class Player {
         }
 
         // Update character velocity
-        this.Characters[this.selectedCharacter].move(this.Buttons.leftStick) // If character is selected, set its velocity based on left stick. 
-        if (Math.abs(Math.sqrt(Math.pow(this.Buttons.leftStick[0], 2) + Math.pow(this.Buttons.leftStick[1], 2))) > 0.2) {
-            if (Math.abs(this.Buttons.leftStick[0]) > Math.abs(this.Buttons.leftStick[1])) {
-                this.Characters[this.selectedCharacter].direction = (this.Buttons.leftStick[0] > 0) ? "RIGHT" : "LEFT";
-            } else {
-                this.Characters[this.selectedCharacter].direction = (this.Buttons.leftStick[1] > 0) ? "DOWN" : "UP";
+
+        // First, set all to zero (used for animations)
+        for (let character of this.Characters) character.Velocity = [0, 0];
+
+        // Then, add in the movement from the left stick
+        if (Math.abs(Math.sqrt(Math.pow(this.Buttons.leftStick[0], 2) + Math.pow(this.Buttons.leftStick[1], 2))) > 0.2) { // Check if the left stick is moved (minimum set to ignore controller drift)
+            if (Math.abs(this.Buttons.leftStick[0]) > Math.abs(this.Buttons.leftStick[1])) { // Check if the left stick is moved horizontally more than vertically
+                if (this.Buttons.leftStick[0] > 0) { // If so, check if the left stick is moved right
+                    this.Characters[this.selectedCharacter].move([1, 0]);
+                    this.Characters[this.selectedCharacter].direction = "RIGHT";
+                } else { // This means the left stick is moved left
+                    this.Characters[this.selectedCharacter].move([-1, 0]);
+                    this.Characters[this.selectedCharacter].direction = "LEFT";
+                }
+            } else { // This means the left stick is moved vertically
+                if (this.Buttons.leftStick[1] > 0) { // Check if the left stick is moved down
+                    this.Characters[this.selectedCharacter].move([0, 1]);
+                    this.Characters[this.selectedCharacter].direction = "DOWN";
+                } else { // This means the left stick is moved up
+                    this.Characters[this.selectedCharacter].move([0, -1]);
+                    this.Characters[this.selectedCharacter].direction = "UP";
+                }
             }
         }
     }
@@ -163,6 +174,24 @@ class Player {
         for (let character of this.Characters) {
             character.draw();
         }
+
+        // Draw character selection
+        if (this.Characters[this.selectedCharacter].respawnTimer == 0) {
+            let selected = this.Characters[this.selectedCharacter];
+
+            context.beginPath();
+            context.moveTo(selected.Position[0] + selected.width / 2 - 12, selected.Position[1] - 16);
+            context.lineTo(selected.Position[0] + selected.width / 2, selected.Position[1] - 8);
+            context.lineTo(selected.Position[0] + selected.width / 2 + 12, selected.Position[1] - 16);
+            context.closePath();
+
+            context.lineWidth = 2;
+            context.strokeStyle = "black";
+            context.stroke();
+
+            context.fillStyle = this.controllerNumber == 0 ? "blue" : "red";
+            context.fill();
+        }
     }
 
     resetCharacters() {
@@ -171,6 +200,19 @@ class Player {
         }
     }
 
+    changeCharacterRight() {
+        for(let i = 0; i<this.Characters.length; i++){
+            this.selectedCharacter = (this.selectedCharacter + 1) % 3;
+            if (this.Characters[this.selectedCharacter].respawnTimer == 0) break;
+        }
+    }
+
+    changeCharacterLeft() {
+        for(let i = 0; i<this.Characters.length; i++){
+            this.selectedCharacter = (this.selectedCharacter + 5) % 3; // Adding 5 does the same thing as subtracting 1 conceptually, but subtracting 1 would actually cause the number to be negative
+            if (this.Characters[this.selectedCharacter].respawnTimer == 0) break;
+        }
+    }
 }
 
 // 
@@ -271,6 +313,54 @@ class ShotgunBullet extends Bullet {
     }
 }
 
+class Bomb extends Bullet {
+    timer: number = 2000 * (frameRate / 1000);
+    radius: number;
+
+    constructor(Position: [number, number], team: number, radius: number) {
+        super(Position, [0, 0], team);
+        this.radius = radius;
+    }
+
+    update(): void {
+        this.timer -= 1;
+        if(this.timer == 0) this.explode();
+    }
+
+    explode(): void {
+        for (let character of Players[(this.team + 1) % 2].Characters) {
+            if (this.checkDistance(character)) {
+                character.die();
+            }
+        }
+    }
+
+    draw(): void {
+        context.fillStyle = "black";
+        context.beginPath();
+        context.arc(this.Position[0], this.Position[1], 10, 0, 2 * Math.PI);
+        context.fill();
+
+        context.fillStyle = attackPreviewStyle;
+        context.beginPath();
+        context.arc(this.Position[0], this.Position[1], this.radius, 0, 2 * Math.PI);
+        context.fill();
+    }
+
+
+    checkDistance(character: Character): boolean {
+        let distanceTL = Math.sqrt(Math.pow(character.Position[0] - (this.Position[0]), 2) + Math.pow(character.Position[1] - (this.Position[1]), 2));
+        let distanceTR = Math.sqrt(Math.pow(character.Position[0] + character.width - (this.Position[0]), 2) + Math.pow(character.Position[1] - (this.Position[1]), 2));
+        let distanceBL = Math.sqrt(Math.pow(character.Position[0] - (this.Position[0]), 2) + Math.pow(character.Position[1] + character.height - (this.Position[1]), 2));
+        let distanceBR = Math.sqrt(Math.pow(character.Position[0] + character.width - (this.Position[0]), 2) + Math.pow(character.Position[1] + character.height - (this.Position[1]), 2));
+
+        if (distanceTL < this.radius || distanceTR < this.radius || distanceBL < this.radius || distanceBR < this.radius) return true;
+
+        return false;
+    }
+
+}
+
 class Arrow extends Bullet {
     maxDistance: number;
     radius: number = 5;
@@ -326,8 +416,8 @@ abstract class Character extends GameObject {
     cooldown: number; // Entered as milliseconds
     cooldownTimer: number = 0;
     speedScalar: number;
-    width: number = 64;
-    height: number = 64
+    width: number = 32;
+    height: number = 52
     team: number;
     respawnTime: number = 3000 * (frameRate / 1000);
     respawnTimer: number = 0;
@@ -335,6 +425,8 @@ abstract class Character extends GameObject {
     direction: "UP" | "DOWN" | "LEFT" | "RIGHT" = "DOWN";
     frame = 0;
     delay = 0;
+
+    spritePadding: { width: number, height: number } = { width: (64 - this.width) / 2, height: (64 - this.height) }; // This is used because the sprites are 64x64, but some of that is empty space used for larger animations and I don't want that. The width is what is cut off of both sides, the height is what is cut off of the top.
 
 
 
@@ -446,17 +538,20 @@ abstract class Character extends GameObject {
                 break;
         }
 
-        this.delay = (this.delay + 1) % 4;
-        if (this.delay == 0) this.frame++;
-
-        // First, find right image
-
-        // If this isn't the selected character, draw the idle image
-        if (Players[this.team].Characters[Players[this.team].selectedCharacter] == this) {
+        if (Math.sqrt(Math.pow(this.Velocity[0], 2) + Math.pow(this.Velocity[1], 2)) > 0.1) { // If the character is moving
+            // Update frame
+            this.delay = (this.delay + 1) % 4;
+            if (this.delay == 0) this.frame++;
             this.frame %= 8;
-            context.drawImage(Images[character], this.width * this.frame, (8 + directionShift) * this.height, this.width, this.height, this.Position[0], this.Position[1], this.width, this.height);
+
+            // Draw
+            context.drawImage(Images[character], (this.width + this.spritePadding.width * 2) * this.frame, (8 + directionShift) * (this.height + this.spritePadding.height), this.width + this.spritePadding.width * 2, this.height + this.spritePadding.height, this.Position[0] - this.spritePadding.width, this.Position[1] - this.spritePadding.height, this.width + this.spritePadding.width * 2, this.height + this.spritePadding.height);
             return;
         }
+
+        // Character is not moving
+        this.frame = 0;
+        context.drawImage(Images[character], (this.width + this.spritePadding.width * 2) * this.frame, (8 + directionShift) * (this.height + this.spritePadding.height), this.width + this.spritePadding.width * 2, this.height + this.spritePadding.height, this.Position[0] - this.spritePadding.width, this.Position[1] - this.spritePadding.height, this.width + this.spritePadding.width * 2, this.height + this.spritePadding.height);
     }
 }
 
@@ -479,8 +574,8 @@ class Shelly extends Character {
     constructor(team: number) {
         super(4, 1000, team);
         this.bulletInfo = {
-            minDistance: 100,
-            maxDistance: 500,
+            minDistance: 300,
+            maxDistance: 700,
             distance: 10,
             bulletTravelTime: this.maxTime * (frameRate / 1000),
             maxSpread: Math.PI / 2,
@@ -498,11 +593,14 @@ class Shelly extends Character {
             return;
         }
 
+        // Draws the hitbox
+        // context.fillStyle = this.team == 0 ? "blue" : "red";
+        // context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
+        // context.fillStyle = "purple";
+        // context.fillRect(this.Position[0] + 2, this.Position[1] + 2, this.width - 4, this.height - 4);
+
         // Draws the character
-        context.fillStyle = this.team == 0 ? "blue" : "red";
-        context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
-        context.fillStyle = "purple";
-        context.fillRect(this.Position[0] + 2, this.Position[1] + 2, this.width - 4, this.height - 4);
+        this.drawCharacter("Shelly")
 
     }
 
@@ -560,11 +658,14 @@ class Mike extends Character {
             return;
         }
 
+        // Draws the hitbox
+        // context.fillStyle = this.team == 0 ? "blue" : "red";
+        // context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
+        // context.fillStyle = "yellow";
+        // context.fillRect(this.Position[0] + 2, this.Position[1] + 2, this.width - 4, this.height - 4);
+
         // Draws the character
-        context.fillStyle = this.team == 0 ? "blue" : "red";
-        context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
-        context.fillStyle = "yellow";
-        context.fillRect(this.Position[0] + 2, this.Position[1] + 2, this.width - 4, this.height - 4);
+        this.drawCharacter("Mike")
     }
 
     update(): void {
@@ -580,24 +681,36 @@ class Mike extends Character {
 }
 
 class Bill extends Character {
+    Bombs: Array<Bomb> = []
     attackRadius: number = 100;
 
     constructor(team: number) {
         super(8, 1000, team);
     }
+
     draw(): void {
+        for(var bomb of this.Bombs) bomb.draw();
+
         if (this.respawnTimer > 1) {
             return;
         }
 
+        // Draws the hitbox
+        // context.fillStyle = this.team == 0 ? "blue" : "red";
+        // context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
+        // context.fillStyle = "green";
+        // context.fillRect(this.Position[0] + 2, this.Position[1] + 2, this.width - 4, this.height - 4);
+
         // Draws the character
-        context.fillStyle = this.team == 0 ? "blue" : "red";
-        context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
-        context.fillStyle = "green";
-        context.fillRect(this.Position[0] + 2, this.Position[1] + 2, this.width - 4, this.height - 4);
+        this.drawCharacter("Bill")
     }
 
     update(): void {
+        for(var bomb of this.Bombs){
+            bomb.update();
+            if(bomb.timer == 0) this.Bombs.splice(this.Bombs.indexOf(bomb), 1);
+        }
+
         if (!this.tryRespawn()) return;
 
         if (this.cooldownTimer > 0) this.cooldownTimer--;
@@ -606,17 +719,9 @@ class Bill extends Character {
     attack(): void {
         this.cooldownTimer = this.cooldown;
 
-        context.fillStyle = "red";
-        context.beginPath();
-        context.arc(this.Position[0] + this.width / 2, this.Position[1] + this.height / 2, this.attackRadius, 0, 2 * Math.PI);
-        context.fill();
-
-        for (let character of Players[(this.team + 1) % 2].Characters) {
-            if (character.respawnTimer == 0 && this.checkDistance(character)) {
-                character.die();
-            }
-        }
+        this.Bombs.push(new Bomb([this.Position[0] + this.width/2, this.Position[1] + this.height/2], this.team, this.attackRadius));
     }
+
 
     drawAttackPreview(): void {
         context.fillStyle = attackPreviewStyle;
@@ -625,16 +730,6 @@ class Bill extends Character {
         context.fill();
     }
 
-    checkDistance(character: Character): boolean {
-        let distanceTL = Math.sqrt(Math.pow(character.Position[0] - (this.Position[0] + this.width / 2), 2) + Math.pow(character.Position[1] - (this.Position[1] + this.height / 2), 2));
-        let distanceTR = Math.sqrt(Math.pow(character.Position[0] + character.width - (this.Position[0] + this.width / 2), 2) + Math.pow(character.Position[1] - (this.Position[1] + this.height / 2), 2));
-        let distanceBL = Math.sqrt(Math.pow(character.Position[0] - (this.Position[0] + this.width / 2), 2) + Math.pow(character.Position[1] + character.height - (this.Position[1] + this.height / 2), 2));
-        let distanceBR = Math.sqrt(Math.pow(character.Position[0] + character.width - (this.Position[0] + this.width / 2), 2) + Math.pow(character.Position[1] + character.height - (this.Position[1] + this.height / 2), 2));
-
-        if (distanceTL < this.attackRadius || distanceTR < this.attackRadius || distanceBL < this.attackRadius || distanceBR < this.attackRadius) return true;
-
-        return false;
-    }
 }
 
 class Esteban extends Character {
@@ -644,12 +739,12 @@ class Esteban extends Character {
         distance: number,
         travelTime: number,
     }
-    maxTime: number = 1000; // Time until full distance/min spread shot in milliseconds
+    maxTime: number = 3 * (frameRate/1000); // Time until full distance/min spread shot in milliseconds
 
     constructor(team: number) {
         super(4, 1000, team);
         this.arrowInfo = {
-            distance: 1000,
+            distance: 2000,
             travelTime: this.maxTime * (frameRate / 1000),
         }
     }
@@ -663,12 +758,13 @@ class Esteban extends Character {
             return;
         }
 
-        // Draws the character
-        context.fillStyle = this.team == 0 ? "blue" : "red";
-        context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
-        context.fillStyle = "pink";
-        context.fillRect(this.Position[0] + 2, this.Position[1] + 2, this.width - 4, this.height - 4);
+        // Draws the hitbox
+        // context.fillStyle = this.team == 0 ? "blue" : "red";
+        // context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
+        // context.fillStyle = "pink";
+        // context.fillRect(this.Position[0] + 2, this.Position[1] + 2, this.width - 4, this.height - 4);
 
+        // Draws the character
         this.drawCharacter("Esteban")
 
     }
@@ -883,6 +979,13 @@ function clearCanvas() {
 
 const Images: { [key: string]: HTMLImageElement } = {
     "Esteban": new Image(),
+    "Shelly": new Image(),
+    "Bill": new Image(),
+    "Mike": new Image(),
+
 };
 
 Images["Esteban"].src = "../../../assets/textures/characters/Esteban.png";
+Images["Shelly"].src = "../../../assets/textures/characters/Shelly.png";
+Images["Bill"].src = "../../../assets/textures/characters/Bill.png";
+Images["Mike"].src = "../../../assets/textures/characters/Mike.png";
