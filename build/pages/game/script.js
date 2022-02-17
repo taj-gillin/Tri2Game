@@ -147,7 +147,7 @@ var Player = /** @class */ (function () {
         // Update holding time for attack button, used for both throwing the ball and attacking
         this.attackHoldTime = (this.Characters[this.selectedCharacter].cooldownTimer == 0 && Math.abs(Math.sqrt(Math.pow(this.Buttons.rightStick[0], 2) + Math.pow(this.Buttons.rightStick[1], 2))) > 0.3) ? this.attackHoldTime + 1 : 0;
         // Ball code
-        if (this.Buttons.rightTrigger && this.attackHoldTime > 0 && this.Characters[this.selectedCharacter].cooldownTimer == 0) {
+        if (this.hasBall && this.Buttons.rightTrigger && this.attackHoldTime > 0 && this.Characters[this.selectedCharacter].cooldownTimer == 0) {
             this.Characters[this.selectedCharacter].throwBall();
             this.attackHoldTime = 0;
             return;
@@ -242,19 +242,46 @@ var Ball = /** @class */ (function (_super) {
         var _this = _super.call(this, Position, Velocity) || this;
         _this.radius = 10;
         _this.pickedUp = false;
-        _this.throwTime = 1;
         _this.team = -1;
+        _this.drag = 0.98;
+        _this.immunityTimer = 0;
+        _this.throwImmunity = 60;
         return _this;
     }
     Ball.prototype.update = function () {
         // If picked up, we don't want to run any logic besides updating position
-        if (this.pickedUp)
+        if (this.pickedUp) {
+            for (var _i = 0, Players_1 = Players; _i < Players_1.length; _i++) {
+                var player = Players_1[_i];
+                if (player.hasBall)
+                    this.Position = player.Characters[player.selectedCharacter].Position;
+            }
             return;
-        // Check if ball is in the air
-        if (this.throwTime > 0) {
-            // this.throwTime--;
-            this.move();
         }
+        // Clip small velocities
+        if (Math.abs(this.Velocity[0]) < 0.1)
+            this.Velocity[0] = 0;
+        if (Math.abs(this.Velocity[1]) < 0.1)
+            this.Velocity[1] = 0;
+        // Apply drag (this system is mediocre and needs to be plotted on a curve in the future)
+        this.Velocity[0] *= this.drag;
+        this.Velocity[1] *= this.drag;
+        if (this.immunityTimer > 0) {
+            this.immunityTimer--;
+            return;
+        }
+        // Check for collisions with players
+        for (var _a = 0, Players_2 = Players; _a < Players_2.length; _a++) {
+            var player = Players_2[_a];
+            for (var _b = 0, _c = player.Characters; _b < _c.length; _b++) { // Iterate through all characters
+                var character = _c[_b];
+                if (this.checkCollision(character)) {
+                    character.pickupBall();
+                }
+            }
+        }
+        // Move ball
+        this.move();
     };
     Ball.prototype.move = function () {
         if (Math.abs(this.Velocity[0]) > 0)
@@ -267,7 +294,7 @@ var Ball = /** @class */ (function (_super) {
         this.Position[0] += this.Velocity[0];
         for (var _i = 0, Objects_1 = Objects; _i < Objects_1.length; _i++) {
             var object = Objects_1[_i];
-            if (this.checkObjectCollision(object)) {
+            if (this.checkCollision(object)) {
                 this.Position[0] -= this.Velocity[0];
                 this.Position[0] -= (this.Velocity[0] > 0 ? object.Position[0] - (this.Position[0] + this.radius) : (object.Position[0] + object.width) - (this.Position[0] - this.radius));
                 this.Velocity[0] *= -1;
@@ -279,7 +306,7 @@ var Ball = /** @class */ (function (_super) {
         this.Position[1] += this.Velocity[1];
         for (var _i = 0, Objects_2 = Objects; _i < Objects_2.length; _i++) {
             var object = Objects_2[_i];
-            if (this.checkObjectCollision(object)) {
+            if (this.checkCollision(object)) {
                 this.Position[1] -= this.Velocity[1];
                 this.Position[1] -= (this.Velocity[1] > 0 ? object.Position[1] - (this.Position[1] + this.radius) : (object.Position[1] + object.height) - (this.Position[1] - this.radius));
                 this.Velocity[1] *= -1;
@@ -287,7 +314,7 @@ var Ball = /** @class */ (function (_super) {
             }
         }
     };
-    Ball.prototype.checkObjectCollision = function (object) {
+    Ball.prototype.checkCollision = function (object) {
         if (this.Position[0] + this.radius > object.Position[0] && this.Position[0] - this.radius < object.Position[0] + object.width && this.Position[1] + this.radius > object.Position[1] && this.Position[1] - this.radius < object.Position[1] + object.height)
             return true;
         var distanceTL = Math.sqrt(Math.pow(object.Position[0] - (this.Position[0]), 2) + Math.pow(object.Position[1] - (this.Position[1]), 2));
@@ -472,7 +499,6 @@ var Character = /** @class */ (function (_super) {
         _this.delay = 0;
         // Ball variables
         _this.ballThrowSpeed = 5;
-        _this.ballThrowTime = 600;
         _this.spritePadding = { width: (64 - _this.width) / 2, height: (64 - _this.height) }; // This is used because the sprites are 64x64, but some of that is empty space used for larger animations and I don't want that. The width is what is cut off of both sides, the height is what is cut off of the top.
         _this.speedScalar = speedScalar;
         _this.team = team;
@@ -525,11 +551,12 @@ var Character = /** @class */ (function (_super) {
         ball.team = -1;
     };
     Character.prototype.throwBall = function () {
-        // ball.pickedUp = false;
+        ball.pickedUp = false;
         Players[this.team].hasBall = false;
         var theta = Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0]);
         ball.Velocity = [this.ballThrowSpeed * Math.cos(theta), this.ballThrowSpeed * Math.sin(theta)];
-        ball.throwTime = this.ballThrowTime;
+        ball.immunityTimer = ball.throwImmunity;
+        alert("throw");
     };
     Character.prototype.die = function () {
         this.respawnTimer = this.respawnTime;
@@ -835,8 +862,8 @@ function gamepadHandler(event, connecting) {
     console.log("Debug: Change with gamepad. Id: " + gamepad.id);
 }
 function reset() {
-    for (var _i = 0, Players_1 = Players; _i < Players_1.length; _i++) {
-        var player = Players_1[_i];
+    for (var _i = 0, Players_3 = Players; _i < Players_3.length; _i++) {
+        var player = Players_3[_i];
         player.resetCharacters();
     }
 }
@@ -877,8 +904,8 @@ function querryControllers() {
 }
 function update() {
     ball.update();
-    for (var _i = 0, Players_2 = Players; _i < Players_2.length; _i++) {
-        var player = Players_2[_i];
+    for (var _i = 0, Players_4 = Players; _i < Players_4.length; _i++) {
+        var player = Players_4[_i];
         player.update();
     }
     for (var _a = 0, Objects_7 = Objects; _a < Objects_7.length; _a++) {
@@ -889,8 +916,8 @@ function update() {
 function draw() {
     clearCanvas();
     ball.draw();
-    for (var _i = 0, Players_3 = Players; _i < Players_3.length; _i++) {
-        var player = Players_3[_i];
+    for (var _i = 0, Players_5 = Players; _i < Players_5.length; _i++) {
+        var player = Players_5[_i];
         player.draw();
     }
     for (var _a = 0, Objects_8 = Objects; _a < Objects_8.length; _a++) {

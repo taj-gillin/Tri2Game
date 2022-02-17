@@ -164,7 +164,7 @@ class Player {
         this.attackHoldTime = (this.Characters[this.selectedCharacter].cooldownTimer == 0 && Math.abs(Math.sqrt(Math.pow(this.Buttons.rightStick[0], 2) + Math.pow(this.Buttons.rightStick[1], 2))) > 0.3) ? this.attackHoldTime + 1 : 0;
 
         // Ball code
-        if (this.Buttons.rightTrigger && this.attackHoldTime > 0 && this.Characters[this.selectedCharacter].cooldownTimer == 0) {
+        if (this.hasBall && this.Buttons.rightTrigger && this.attackHoldTime > 0 && this.Characters[this.selectedCharacter].cooldownTimer == 0) {
             this.Characters[this.selectedCharacter].throwBall();
             this.attackHoldTime = 0;
             return;
@@ -272,8 +272,10 @@ class Box extends CollidableObject {
 class Ball extends GameObject {
     radius: number = 10;
     pickedUp: boolean = false;
-    throwTime: number = 1;
     team: number = -1;
+    drag: number = 0.98;
+    immunityTimer: number = 0;
+    throwImmunity: number = 60;
 
     constructor(Position: [number, number], Velocity: [number, number]) {
         super(Position, Velocity);
@@ -281,17 +283,36 @@ class Ball extends GameObject {
 
     update(): void {
 
+
         // If picked up, we don't want to run any logic besides updating position
-        if (this.pickedUp) return;
-
-
-
-        // Check if ball is in the air
-        if (this.throwTime > 0) {
-            // this.throwTime--;
-            this.move();
+        if (this.pickedUp) {
+            for (let player of Players) if (player.hasBall) this.Position = player.Characters[player.selectedCharacter].Position;
+            return;
         }
 
+
+        // Clip small velocities
+        if (Math.abs(this.Velocity[0]) < 0.1) this.Velocity[0] = 0;
+        if (Math.abs(this.Velocity[1]) < 0.1) this.Velocity[1] = 0;
+
+        // Apply drag (this system is mediocre and needs to be plotted on a curve in the future)
+        this.Velocity[0] *= this.drag;
+        this.Velocity[1] *= this.drag;
+
+        if(this.immunityTimer > 0) {
+            this.immunityTimer--;
+            return;
+        }
+
+        // Check for collisions with players
+          for (let player of Players) for (let character of player.Characters) { // Iterate through all characters
+            if (this.checkCollision(character)) {
+                character.pickupBall();
+            }
+        }
+
+        // Move ball
+        this.move();
     }
     move() {
 
@@ -304,20 +325,22 @@ class Ball extends GameObject {
         this.Position[0] += this.Velocity[0];
 
         for (let object of Objects) {
-            if (this.checkObjectCollision(object)) {
+            if (this.checkCollision(object)) {
                 this.Position[0] -= this.Velocity[0];
                 this.Position[0] -= (this.Velocity[0] > 0 ? object.Position[0] - (this.Position[0] + this.radius) : (object.Position[0] + object.width) - (this.Position[0] - this.radius));
                 this.Velocity[0] *= -1;
                 return;
             }
         }
+
+
     }
 
     moveY() {
         this.Position[1] += this.Velocity[1];
 
         for (let object of Objects) {
-            if (this.checkObjectCollision(object)) {
+            if (this.checkCollision(object)) {
                 this.Position[1] -= this.Velocity[1];
                 this.Position[1] -= (this.Velocity[1] > 0 ? object.Position[1] - (this.Position[1] + this.radius) : (object.Position[1] + object.height) - (this.Position[1] - this.radius));
                 this.Velocity[1] *= -1;
@@ -326,7 +349,7 @@ class Ball extends GameObject {
         }
     }
 
-    checkObjectCollision(object: CollidableObject): boolean {
+    checkCollision(object: CollidableObject | Character): boolean {
         if (this.Position[0] + this.radius > object.Position[0] && this.Position[0] - this.radius < object.Position[0] + object.width && this.Position[1] + this.radius > object.Position[1] && this.Position[1] - this.radius < object.Position[1] + object.height) return true;
 
 
@@ -340,6 +363,7 @@ class Ball extends GameObject {
         return false;
     }
 
+    
     draw(): void {
         context.fillStyle = "black";
         context.beginPath();
@@ -535,7 +559,6 @@ abstract class Character extends GameObject {
 
     // Ball variables
     ballThrowSpeed: number = 5;
-    ballThrowTime: number = 600;
 
 
 
@@ -601,12 +624,13 @@ abstract class Character extends GameObject {
     }
 
     throwBall() {
-        // ball.pickedUp = false;
+        ball.pickedUp = false;
         Players[this.team].hasBall = false;
 
         let theta = Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0]);
         ball.Velocity = [this.ballThrowSpeed * Math.cos(theta), this.ballThrowSpeed * Math.sin(theta)]
-        ball.throwTime = this.ballThrowTime;
+        ball.immunityTimer = ball.throwImmunity;
+        alert("throw")
     }
 
     abstract update(): void;
