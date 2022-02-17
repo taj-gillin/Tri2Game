@@ -30,6 +30,8 @@ class Player {
     controllerNumber: number; // Which controller is linked to this player. Range: [0,1]
     Characters: [Character, Character, Character];
 
+    hasBall: boolean = false;
+
     checkButtons(gamepad: Gamepad) {
         this.Buttons.a = gamepad.buttons[0].pressed;
         this.Buttons.b = gamepad.buttons[1].pressed;
@@ -118,30 +120,23 @@ class Player {
         // Update character
         if (this.Buttons.leftShoulder && !this.prevButtons.leftShoulder) this.changeCharacterLeft();
         if (this.Buttons.rightShoulder && !this.prevButtons.rightShoulder) this.changeCharacterRight();
-    
 
-        if(this.Characters[this.selectedCharacter].respawnTimer > 0) this.changeCharacterRight();
+
+        if (this.Characters[this.selectedCharacter].respawnTimer > 0) this.changeCharacterRight();
 
         // Do any other character updates
         for (let i = 0; i < this.Characters.length; i++) {
             this.Characters[i].update();
         }
 
-        // Check if selected character is dead
+        // Check if selected character is dead, don't run code after if they are
         if (this.Characters[0].respawnTimer > 0 && this.Characters[1].respawnTimer > 0 && this.Characters[2].respawnTimer > 0) return;
 
-        // Update holding time for attack button
-        this.attackHoldTime = (this.Characters[this.selectedCharacter].cooldownTimer == 0 && Math.abs(Math.sqrt(Math.pow(this.Buttons.rightStick[0], 2) + Math.pow(this.Buttons.rightStick[1], 2))) > 0.3) ? this.attackHoldTime + 1 : 0;
 
-        // If attack button is pressed, attack
-        if (this.Buttons.rightTrigger && this.attackHoldTime > 0 && this.Characters[this.selectedCharacter].cooldownTimer == 0) {
-            this.Characters[this.selectedCharacter].attack();
-            this.attackHoldTime = 0;
-        }
 
         // Update character velocity
 
-        // First, set all to zero (used for animations)
+        // First, set all to zero (used for animations) (but I forgot why)
         for (let character of this.Characters) character.Velocity = [0, 0];
 
         // Then, add in the movement from the left stick
@@ -163,6 +158,25 @@ class Player {
                     this.Characters[this.selectedCharacter].direction = "UP";
                 }
             }
+        }
+
+        // Update holding time for attack button, used for both throwing the ball and attacking
+        this.attackHoldTime = (this.Characters[this.selectedCharacter].cooldownTimer == 0 && Math.abs(Math.sqrt(Math.pow(this.Buttons.rightStick[0], 2) + Math.pow(this.Buttons.rightStick[1], 2))) > 0.3) ? this.attackHoldTime + 1 : 0;
+
+        // Ball code
+        if (this.Buttons.rightTrigger && this.attackHoldTime > 0 && this.Characters[this.selectedCharacter].cooldownTimer == 0) {
+            this.Characters[this.selectedCharacter].throwBall();
+            this.attackHoldTime = 0;
+            return;
+        }
+
+        // If holding ball, don't run attack code
+        if (this.hasBall) return;
+
+        // If attack button is pressed, attack
+        if (this.Buttons.rightTrigger && this.attackHoldTime > 0 && this.Characters[this.selectedCharacter].cooldownTimer == 0) {
+            this.Characters[this.selectedCharacter].attack();
+            this.attackHoldTime = 0;
         }
     }
 
@@ -201,18 +215,20 @@ class Player {
     }
 
     changeCharacterRight() {
-        for(let i = 0; i<this.Characters.length; i++){
+        for (let i = 0; i < this.Characters.length; i++) {
             this.selectedCharacter = (this.selectedCharacter + 1) % 3;
             if (this.Characters[this.selectedCharacter].respawnTimer == 0) break;
         }
     }
 
     changeCharacterLeft() {
-        for(let i = 0; i<this.Characters.length; i++){
+        for (let i = 0; i < this.Characters.length; i++) {
             this.selectedCharacter = (this.selectedCharacter + 5) % 3; // Adding 5 does the same thing as subtracting 1 conceptually, but subtracting 1 would actually cause the number to be negative
             if (this.Characters[this.selectedCharacter].respawnTimer == 0) break;
         }
     }
+
+
 }
 
 // 
@@ -251,6 +267,85 @@ class Box extends CollidableObject {
         context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
     }
 
+}
+
+class Ball extends GameObject {
+    radius: number = 10;
+    pickedUp: boolean = false;
+    throwTime: number = 1;
+    team: number = -1;
+
+    constructor(Position: [number, number], Velocity: [number, number]) {
+        super(Position, Velocity);
+    }
+
+    update(): void {
+
+        // If picked up, we don't want to run any logic besides updating position
+        if (this.pickedUp) return;
+
+
+
+        // Check if ball is in the air
+        if (this.throwTime > 0) {
+            // this.throwTime--;
+            this.move();
+        }
+
+    }
+    move() {
+
+        if (Math.abs(this.Velocity[0]) > 0) this.moveX();
+        if (Math.abs(this.Velocity[1]) > 0) this.moveY();
+    }
+
+    // I should turn these two into one function at some point
+    moveX() {
+        this.Position[0] += this.Velocity[0];
+
+        for (let object of Objects) {
+            if (this.checkObjectCollision(object)) {
+                this.Position[0] -= this.Velocity[0];
+                this.Position[0] -= (this.Velocity[0] > 0 ? object.Position[0] - (this.Position[0] + this.radius) : (object.Position[0] + object.width) - (this.Position[0] - this.radius));
+                this.Velocity[0] *= -1;
+                return;
+            }
+        }
+    }
+
+    moveY() {
+        this.Position[1] += this.Velocity[1];
+
+        for (let object of Objects) {
+            if (this.checkObjectCollision(object)) {
+                this.Position[1] -= this.Velocity[1];
+                this.Position[1] -= (this.Velocity[1] > 0 ? object.Position[1] - (this.Position[1] + this.radius) : (object.Position[1] + object.height) - (this.Position[1] - this.radius));
+                this.Velocity[1] *= -1;
+                return;
+            }
+        }
+    }
+
+    checkObjectCollision(object: CollidableObject): boolean {
+        if (this.Position[0] + this.radius > object.Position[0] && this.Position[0] - this.radius < object.Position[0] + object.width && this.Position[1] + this.radius > object.Position[1] && this.Position[1] - this.radius < object.Position[1] + object.height) return true;
+
+
+        let distanceTL = Math.sqrt(Math.pow(object.Position[0] - (this.Position[0]), 2) + Math.pow(object.Position[1] - (this.Position[1]), 2));
+        let distanceTR = Math.sqrt(Math.pow(object.Position[0] + object.width - (this.Position[0]), 2) + Math.pow(object.Position[1] - (this.Position[1]), 2));
+        let distanceBL = Math.sqrt(Math.pow(object.Position[0] - (this.Position[0]), 2) + Math.pow(object.Position[1] + object.height - (this.Position[1]), 2));
+        let distanceBR = Math.sqrt(Math.pow(object.Position[0] + object.width - (this.Position[0]), 2) + Math.pow(object.Position[1] + object.height - (this.Position[1]), 2));
+
+        if (distanceTL < this.radius || distanceTR < this.radius || distanceBL < this.radius || distanceBR < this.radius) return true;
+
+        return false;
+    }
+
+    draw(): void {
+        context.fillStyle = "black";
+        context.beginPath();
+        context.arc(this.Position[0], this.Position[1], this.radius, 0, 2 * Math.PI);
+        context.fill();
+    }
 }
 
 abstract class Bullet extends GameObject {
@@ -324,7 +419,7 @@ class Bomb extends Bullet {
 
     update(): void {
         this.timer -= 1;
-        if(this.timer == 0) this.explode();
+        if (this.timer == 0) this.explode();
     }
 
     explode(): void {
@@ -349,6 +444,8 @@ class Bomb extends Bullet {
 
 
     checkDistance(character: Character): boolean {
+        if (this.Position[0] + this.radius > character.Position[0] && this.Position[0] - this.radius < character.Position[0] + character.width && this.Position[1] + this.radius > character.Position[1] && this.Position[1] - this.radius < character.Position[1] + character.height) return true;
+
         let distanceTL = Math.sqrt(Math.pow(character.Position[0] - (this.Position[0]), 2) + Math.pow(character.Position[1] - (this.Position[1]), 2));
         let distanceTR = Math.sqrt(Math.pow(character.Position[0] + character.width - (this.Position[0]), 2) + Math.pow(character.Position[1] - (this.Position[1]), 2));
         let distanceBL = Math.sqrt(Math.pow(character.Position[0] - (this.Position[0]), 2) + Math.pow(character.Position[1] + character.height - (this.Position[1]), 2));
@@ -413,18 +510,35 @@ class Arrow extends Bullet {
 }
 
 abstract class Character extends GameObject {
+    // Attack cooldown variables
     cooldown: number; // Entered as milliseconds
     cooldownTimer: number = 0;
+
+    // Speed variable
     speedScalar: number;
+
+    // Size variables
     width: number = 32;
     height: number = 52
+
+    // Team
     team: number;
+
+    // Respawn variables
     respawnTime: number = 3000 * (frameRate / 1000);
     respawnTimer: number = 0;
-    hasBall: boolean = false;
+
+    // Animation variables
     direction: "UP" | "DOWN" | "LEFT" | "RIGHT" = "DOWN";
-    frame = 0;
-    delay = 0;
+    frame: number = 0;
+    delay: number = 0;
+
+    // Ball variables
+    ballThrowSpeed: number = 5;
+    ballThrowTime: number = 600;
+
+
+
 
     spritePadding: { width: number, height: number } = { width: (64 - this.width) / 2, height: (64 - this.height) }; // This is used because the sprites are 64x64, but some of that is empty space used for larger animations and I don't want that. The width is what is cut off of both sides, the height is what is cut off of the top.
 
@@ -456,8 +570,7 @@ abstract class Character extends GameObject {
         for (let object of Objects) {
             if (this.checkCollision(object)) {
                 this.Position[0] -= this.Velocity[0];
-                this.Velocity[0] = (this.Velocity[0] > 0 ? object.Position[0] - (this.Position[0] + this.width) : (object.Position[0] + object.width) - this.Position[0]);
-                this.Position[0] += this.Velocity[0];
+                this.Position[0] -= (this.Velocity[0] > 0 ? object.Position[0] - (this.Position[0] + this.width) : (object.Position[0] + object.width) - this.Position[0]);
                 return;
             }
         }
@@ -469,11 +582,31 @@ abstract class Character extends GameObject {
         for (let object of Objects) {
             if (this.checkCollision(object)) {
                 this.Position[1] -= this.Velocity[1];
-                this.Velocity[1] = (this.Velocity[1] > 0 ? object.Position[1] - (this.Position[1] + this.height) : (object.Position[1] + object.height) - this.Position[1]);
-                this.Position[1] += this.Velocity[1];
+                this.Position[1] -= (this.Velocity[1] > 0 ? object.Position[1] - (this.Position[1] + this.height) : (object.Position[1] + object.height) - this.Position[1]);
                 return;
             }
         }
+    }
+
+    pickupBall() {
+        ball.pickedUp = true;
+        ball.team = this.team;
+        Players[this.team].hasBall = true;
+    }
+
+    dropBall() {
+        ball.pickedUp = false;
+        Players[this.team].hasBall = false;
+        ball.team = -1;
+    }
+
+    throwBall() {
+        // ball.pickedUp = false;
+        Players[this.team].hasBall = false;
+
+        let theta = Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0]);
+        ball.Velocity = [this.ballThrowSpeed * Math.cos(theta), this.ballThrowSpeed * Math.sin(theta)]
+        ball.throwTime = this.ballThrowTime;
     }
 
     abstract update(): void;
@@ -689,7 +822,7 @@ class Bill extends Character {
     }
 
     draw(): void {
-        for(var bomb of this.Bombs) bomb.draw();
+        for (var bomb of this.Bombs) bomb.draw();
 
         if (this.respawnTimer > 1) {
             return;
@@ -706,9 +839,9 @@ class Bill extends Character {
     }
 
     update(): void {
-        for(var bomb of this.Bombs){
+        for (var bomb of this.Bombs) {
             bomb.update();
-            if(bomb.timer == 0) this.Bombs.splice(this.Bombs.indexOf(bomb), 1);
+            if (bomb.timer == 0) this.Bombs.splice(this.Bombs.indexOf(bomb), 1);
         }
 
         if (!this.tryRespawn()) return;
@@ -719,7 +852,7 @@ class Bill extends Character {
     attack(): void {
         this.cooldownTimer = this.cooldown;
 
-        this.Bombs.push(new Bomb([this.Position[0] + this.width/2, this.Position[1] + this.height/2], this.team, this.attackRadius));
+        this.Bombs.push(new Bomb([this.Position[0] + this.width / 2, this.Position[1] + this.height / 2], this.team, this.attackRadius));
     }
 
 
@@ -739,7 +872,7 @@ class Esteban extends Character {
         distance: number,
         travelTime: number,
     }
-    maxTime: number = 3 * (frameRate/1000); // Time until full distance/min spread shot in milliseconds
+    maxTime: number = 600; // Time until full distance/min spread shot in milliseconds
 
     constructor(team: number) {
         super(4, 1000, team);
@@ -817,6 +950,9 @@ var Gamepads: Array<Gamepad> = [];
 var Players: Array<Player> = [new Player(0), new Player(1)];
 var Objects: Array<CollidableObject> = [new Box([window.innerWidth / 2 - 250, window.innerHeight / 2 - 50], 100, 100), new Box([window.innerWidth / 2 + 150, window.innerHeight / 2 - 50], 100, 100)];
 
+// Ball
+var ball = new Ball([window.innerWidth / 2, window.innerHeight / 2], [0, 0]);
+
 // Add walls
 Objects.push(new Box([0, -5], window.innerWidth, 10));
 Objects.push(new Box([-5, 0], 10, window.innerHeight));
@@ -835,13 +971,11 @@ function gamepadHandler(event, connecting) {
     console.log("Debug: Change with gamepad. Id: " + gamepad.id)
 }
 
-
 function reset() {
     for (let player of Players) {
         player.resetCharacters();
     }
 }
-
 
 // Start animation loop
 setInterval(animate, 1000 / frameRate);
@@ -885,8 +1019,9 @@ function querryControllers() {
     }
 }
 
-
 function update() {
+    ball.update();
+
     for (const player of Players) {
         player.update();
     }
@@ -898,6 +1033,8 @@ function update() {
 
 function draw() {
     clearCanvas();
+
+    ball.draw();
 
     for (const player of Players) {
         player.draw();
@@ -969,20 +1106,16 @@ function debug() {
     debugOutput1.innerText = buttonOutput;
 }
 
-
 function clearCanvas() {
     context.fillStyle = 'rgba(255, 255, 255)';
     context.fillRect(0, 0, canvas.width, canvas.height);
 }
-
-
 
 const Images: { [key: string]: HTMLImageElement } = {
     "Esteban": new Image(),
     "Shelly": new Image(),
     "Bill": new Image(),
     "Mike": new Image(),
-
 };
 
 Images["Esteban"].src = "../../../assets/textures/characters/Esteban.png";

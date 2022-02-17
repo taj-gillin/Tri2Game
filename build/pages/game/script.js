@@ -17,6 +17,7 @@ var __extends = (this && this.__extends) || (function () {
 var Player = /** @class */ (function () {
     function Player(controllerNumber) {
         this.attackHoldTime = 0;
+        this.hasBall = false;
         this.controllerNumber = controllerNumber;
         this.selectedCharacter = 0;
         this.Buttons = {
@@ -111,18 +112,11 @@ var Player = /** @class */ (function () {
         for (var i = 0; i < this.Characters.length; i++) {
             this.Characters[i].update();
         }
-        // Check if selected character is dead
+        // Check if selected character is dead, don't run code after if they are
         if (this.Characters[0].respawnTimer > 0 && this.Characters[1].respawnTimer > 0 && this.Characters[2].respawnTimer > 0)
             return;
-        // Update holding time for attack button
-        this.attackHoldTime = (this.Characters[this.selectedCharacter].cooldownTimer == 0 && Math.abs(Math.sqrt(Math.pow(this.Buttons.rightStick[0], 2) + Math.pow(this.Buttons.rightStick[1], 2))) > 0.3) ? this.attackHoldTime + 1 : 0;
-        // If attack button is pressed, attack
-        if (this.Buttons.rightTrigger && this.attackHoldTime > 0 && this.Characters[this.selectedCharacter].cooldownTimer == 0) {
-            this.Characters[this.selectedCharacter].attack();
-            this.attackHoldTime = 0;
-        }
         // Update character velocity
-        // First, set all to zero (used for animations)
+        // First, set all to zero (used for animations) (but I forgot why)
         for (var _i = 0, _a = this.Characters; _i < _a.length; _i++) {
             var character = _a[_i];
             character.Velocity = [0, 0];
@@ -149,6 +143,22 @@ var Player = /** @class */ (function () {
                     this.Characters[this.selectedCharacter].direction = "UP";
                 }
             }
+        }
+        // Update holding time for attack button, used for both throwing the ball and attacking
+        this.attackHoldTime = (this.Characters[this.selectedCharacter].cooldownTimer == 0 && Math.abs(Math.sqrt(Math.pow(this.Buttons.rightStick[0], 2) + Math.pow(this.Buttons.rightStick[1], 2))) > 0.3) ? this.attackHoldTime + 1 : 0;
+        // Ball code
+        if (this.Buttons.rightTrigger && this.attackHoldTime > 0 && this.Characters[this.selectedCharacter].cooldownTimer == 0) {
+            this.Characters[this.selectedCharacter].throwBall();
+            this.attackHoldTime = 0;
+            return;
+        }
+        // If holding ball, don't run attack code
+        if (this.hasBall)
+            return;
+        // If attack button is pressed, attack
+        if (this.Buttons.rightTrigger && this.attackHoldTime > 0 && this.Characters[this.selectedCharacter].cooldownTimer == 0) {
+            this.Characters[this.selectedCharacter].attack();
+            this.attackHoldTime = 0;
         }
     };
     Player.prototype.draw = function () {
@@ -226,6 +236,76 @@ var Box = /** @class */ (function (_super) {
     };
     return Box;
 }(CollidableObject));
+var Ball = /** @class */ (function (_super) {
+    __extends(Ball, _super);
+    function Ball(Position, Velocity) {
+        var _this = _super.call(this, Position, Velocity) || this;
+        _this.radius = 10;
+        _this.pickedUp = false;
+        _this.throwTime = 1;
+        _this.team = -1;
+        return _this;
+    }
+    Ball.prototype.update = function () {
+        // If picked up, we don't want to run any logic besides updating position
+        if (this.pickedUp)
+            return;
+        // Check if ball is in the air
+        if (this.throwTime > 0) {
+            // this.throwTime--;
+            this.move();
+        }
+    };
+    Ball.prototype.move = function () {
+        if (Math.abs(this.Velocity[0]) > 0)
+            this.moveX();
+        if (Math.abs(this.Velocity[1]) > 0)
+            this.moveY();
+    };
+    // I should turn these two into one function at some point
+    Ball.prototype.moveX = function () {
+        this.Position[0] += this.Velocity[0];
+        for (var _i = 0, Objects_1 = Objects; _i < Objects_1.length; _i++) {
+            var object = Objects_1[_i];
+            if (this.checkObjectCollision(object)) {
+                this.Position[0] -= this.Velocity[0];
+                this.Position[0] -= (this.Velocity[0] > 0 ? object.Position[0] - (this.Position[0] + this.radius) : (object.Position[0] + object.width) - (this.Position[0] - this.radius));
+                this.Velocity[0] *= -1;
+                return;
+            }
+        }
+    };
+    Ball.prototype.moveY = function () {
+        this.Position[1] += this.Velocity[1];
+        for (var _i = 0, Objects_2 = Objects; _i < Objects_2.length; _i++) {
+            var object = Objects_2[_i];
+            if (this.checkObjectCollision(object)) {
+                this.Position[1] -= this.Velocity[1];
+                this.Position[1] -= (this.Velocity[1] > 0 ? object.Position[1] - (this.Position[1] + this.radius) : (object.Position[1] + object.height) - (this.Position[1] - this.radius));
+                this.Velocity[1] *= -1;
+                return;
+            }
+        }
+    };
+    Ball.prototype.checkObjectCollision = function (object) {
+        if (this.Position[0] + this.radius > object.Position[0] && this.Position[0] - this.radius < object.Position[0] + object.width && this.Position[1] + this.radius > object.Position[1] && this.Position[1] - this.radius < object.Position[1] + object.height)
+            return true;
+        var distanceTL = Math.sqrt(Math.pow(object.Position[0] - (this.Position[0]), 2) + Math.pow(object.Position[1] - (this.Position[1]), 2));
+        var distanceTR = Math.sqrt(Math.pow(object.Position[0] + object.width - (this.Position[0]), 2) + Math.pow(object.Position[1] - (this.Position[1]), 2));
+        var distanceBL = Math.sqrt(Math.pow(object.Position[0] - (this.Position[0]), 2) + Math.pow(object.Position[1] + object.height - (this.Position[1]), 2));
+        var distanceBR = Math.sqrt(Math.pow(object.Position[0] + object.width - (this.Position[0]), 2) + Math.pow(object.Position[1] + object.height - (this.Position[1]), 2));
+        if (distanceTL < this.radius || distanceTR < this.radius || distanceBL < this.radius || distanceBR < this.radius)
+            return true;
+        return false;
+    };
+    Ball.prototype.draw = function () {
+        context.fillStyle = "black";
+        context.beginPath();
+        context.arc(this.Position[0], this.Position[1], this.radius, 0, 2 * Math.PI);
+        context.fill();
+    };
+    return Ball;
+}(GameObject));
 var Bullet = /** @class */ (function (_super) {
     __extends(Bullet, _super);
     function Bullet(Position, Velocity, team) {
@@ -256,8 +336,8 @@ var ShotgunBullet = /** @class */ (function (_super) {
             this.Position[1] += this.Velocity[1] * scalar;
             this.maxDistance = 0;
         }
-        for (var _i = 0, Objects_1 = Objects; _i < Objects_1.length; _i++) {
-            var object = Objects_1[_i];
+        for (var _i = 0, Objects_3 = Objects; _i < Objects_3.length; _i++) {
+            var object = Objects_3[_i];
             if (this.checkCollision(object)) {
                 this.maxDistance = 0;
                 return;
@@ -315,6 +395,8 @@ var Bomb = /** @class */ (function (_super) {
         context.fill();
     };
     Bomb.prototype.checkDistance = function (character) {
+        if (this.Position[0] + this.radius > character.Position[0] && this.Position[0] - this.radius < character.Position[0] + character.width && this.Position[1] + this.radius > character.Position[1] && this.Position[1] - this.radius < character.Position[1] + character.height)
+            return true;
         var distanceTL = Math.sqrt(Math.pow(character.Position[0] - (this.Position[0]), 2) + Math.pow(character.Position[1] - (this.Position[1]), 2));
         var distanceTR = Math.sqrt(Math.pow(character.Position[0] + character.width - (this.Position[0]), 2) + Math.pow(character.Position[1] - (this.Position[1]), 2));
         var distanceBL = Math.sqrt(Math.pow(character.Position[0] - (this.Position[0]), 2) + Math.pow(character.Position[1] + character.height - (this.Position[1]), 2));
@@ -346,8 +428,8 @@ var Arrow = /** @class */ (function (_super) {
             this.Position[1] += this.Velocity[1] * scalar;
             this.maxDistance = 0;
         }
-        for (var _i = 0, Objects_2 = Objects; _i < Objects_2.length; _i++) {
-            var object = Objects_2[_i];
+        for (var _i = 0, Objects_4 = Objects; _i < Objects_4.length; _i++) {
+            var object = Objects_4[_i];
             if (this.checkCollision(object)) {
                 this.maxDistance = 0;
                 return;
@@ -378,14 +460,19 @@ var Character = /** @class */ (function (_super) {
     function Character(speedScalar, cooldown, team) {
         var _this = _super.call(this, [-100, -100], [0, 0]) || this;
         _this.cooldownTimer = 0;
+        // Size variables
         _this.width = 32;
         _this.height = 52;
+        // Respawn variables
         _this.respawnTime = 3000 * (frameRate / 1000);
         _this.respawnTimer = 0;
-        _this.hasBall = false;
+        // Animation variables
         _this.direction = "DOWN";
         _this.frame = 0;
         _this.delay = 0;
+        // Ball variables
+        _this.ballThrowSpeed = 5;
+        _this.ballThrowTime = 600;
         _this.spritePadding = { width: (64 - _this.width) / 2, height: (64 - _this.height) }; // This is used because the sprites are 64x64, but some of that is empty space used for larger animations and I don't want that. The width is what is cut off of both sides, the height is what is cut off of the top.
         _this.speedScalar = speedScalar;
         _this.team = team;
@@ -407,27 +494,42 @@ var Character = /** @class */ (function (_super) {
     // I should turn these two into one function at some point
     Character.prototype.moveX = function () {
         this.Position[0] += this.Velocity[0];
-        for (var _i = 0, Objects_3 = Objects; _i < Objects_3.length; _i++) {
-            var object = Objects_3[_i];
+        for (var _i = 0, Objects_5 = Objects; _i < Objects_5.length; _i++) {
+            var object = Objects_5[_i];
             if (this.checkCollision(object)) {
                 this.Position[0] -= this.Velocity[0];
-                this.Velocity[0] = (this.Velocity[0] > 0 ? object.Position[0] - (this.Position[0] + this.width) : (object.Position[0] + object.width) - this.Position[0]);
-                this.Position[0] += this.Velocity[0];
+                this.Position[0] -= (this.Velocity[0] > 0 ? object.Position[0] - (this.Position[0] + this.width) : (object.Position[0] + object.width) - this.Position[0]);
                 return;
             }
         }
     };
     Character.prototype.moveY = function () {
         this.Position[1] += this.Velocity[1];
-        for (var _i = 0, Objects_4 = Objects; _i < Objects_4.length; _i++) {
-            var object = Objects_4[_i];
+        for (var _i = 0, Objects_6 = Objects; _i < Objects_6.length; _i++) {
+            var object = Objects_6[_i];
             if (this.checkCollision(object)) {
                 this.Position[1] -= this.Velocity[1];
-                this.Velocity[1] = (this.Velocity[1] > 0 ? object.Position[1] - (this.Position[1] + this.height) : (object.Position[1] + object.height) - this.Position[1]);
-                this.Position[1] += this.Velocity[1];
+                this.Position[1] -= (this.Velocity[1] > 0 ? object.Position[1] - (this.Position[1] + this.height) : (object.Position[1] + object.height) - this.Position[1]);
                 return;
             }
         }
+    };
+    Character.prototype.pickupBall = function () {
+        ball.pickedUp = true;
+        ball.team = this.team;
+        Players[this.team].hasBall = true;
+    };
+    Character.prototype.dropBall = function () {
+        ball.pickedUp = false;
+        Players[this.team].hasBall = false;
+        ball.team = -1;
+    };
+    Character.prototype.throwBall = function () {
+        // ball.pickedUp = false;
+        Players[this.team].hasBall = false;
+        var theta = Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0]);
+        ball.Velocity = [this.ballThrowSpeed * Math.cos(theta), this.ballThrowSpeed * Math.sin(theta)];
+        ball.throwTime = this.ballThrowTime;
     };
     Character.prototype.die = function () {
         this.respawnTimer = this.respawnTime;
@@ -650,7 +752,7 @@ var Esteban = /** @class */ (function (_super) {
     function Esteban(team) {
         var _this = _super.call(this, 4, 1000, team) || this;
         _this.Arrows = [];
-        _this.maxTime = 3 * (frameRate / 1000); // Time until full distance/min spread shot in milliseconds
+        _this.maxTime = 600; // Time until full distance/min spread shot in milliseconds
         _this.arrowInfo = {
             distance: 2000,
             travelTime: _this.maxTime * (frameRate / 1000),
@@ -716,6 +818,8 @@ var attackPreviewStyle = "rgba(0, 0, 0, 0.1)";
 var Gamepads = [];
 var Players = [new Player(0), new Player(1)];
 var Objects = [new Box([window.innerWidth / 2 - 250, window.innerHeight / 2 - 50], 100, 100), new Box([window.innerWidth / 2 + 150, window.innerHeight / 2 - 50], 100, 100)];
+// Ball
+var ball = new Ball([window.innerWidth / 2, window.innerHeight / 2], [0, 0]);
 // Add walls
 Objects.push(new Box([0, -5], window.innerWidth, 10));
 Objects.push(new Box([-5, 0], 10, window.innerHeight));
@@ -772,23 +876,25 @@ function querryControllers() {
     }
 }
 function update() {
+    ball.update();
     for (var _i = 0, Players_2 = Players; _i < Players_2.length; _i++) {
         var player = Players_2[_i];
         player.update();
     }
-    for (var _a = 0, Objects_5 = Objects; _a < Objects_5.length; _a++) {
-        var object = Objects_5[_a];
+    for (var _a = 0, Objects_7 = Objects; _a < Objects_7.length; _a++) {
+        var object = Objects_7[_a];
         object.update();
     }
 }
 function draw() {
     clearCanvas();
+    ball.draw();
     for (var _i = 0, Players_3 = Players; _i < Players_3.length; _i++) {
         var player = Players_3[_i];
         player.draw();
     }
-    for (var _a = 0, Objects_6 = Objects; _a < Objects_6.length; _a++) {
-        var object = Objects_6[_a];
+    for (var _a = 0, Objects_8 = Objects; _a < Objects_8.length; _a++) {
+        var object = Objects_8[_a];
         object.draw();
     }
 }
