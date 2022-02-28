@@ -1,5 +1,3 @@
-console.log(window.innerHeight)
-console.log(window.innerWidth)
 // Define types
 type Buttons = {
     a: boolean;
@@ -20,6 +18,56 @@ type Buttons = {
     rightStickPress: boolean;
     leftStick: [number, number];
     rightStick: [number, number];
+}
+
+class Game {
+    score: [number, number] = [0, 0];
+    minWinScore: number = 3;
+    paused: boolean = false;
+
+    constructor() {
+    }
+
+    init() {
+        this.resetField();
+    }
+
+    goalScored(team: number) {
+        this.score[team]++;
+        if(this.score[team] >= this.minWinScore) {
+            this.endGame(team);
+        }
+        this.resetField();
+    }
+
+    endGame(team: number) {
+        localStorage.setItem("winner", team.toString());
+        window.location.href = "../win/index.html";
+    }
+
+    resetField() {
+        ball.reset();
+
+        for (let player of Players) {
+            player.resetCharacters();
+        }
+    }
+
+    display(){
+        this.displayScore();
+    }
+
+    displayScore() {
+        context.font = "60px Arial";
+        context.textAlign = "center";
+        context.fillStyle = "blue";
+        context.fillText(`${this.score[0]}`, canvas.width / 2 - 30, 65);
+        context.fillStyle = "black";
+        context.fillText(` - `, canvas.width / 2, 65);
+        context.fillStyle = "red";
+        context.fillText(`${this.score[1]}`, canvas.width / 2 + 30, 65);
+
+    }
 }
 
 // Define classes
@@ -275,6 +323,22 @@ class Box extends CollidableObject {
 
 }
 
+class Goal extends CollidableObject {
+    team: number;
+
+    constructor(Position: [number, number], width, height, team) {
+        super(Position, width, height);
+        this.team = team;
+    }
+
+    update(): void { }
+
+    draw(): void {
+        context.fillStyle = "green";
+        context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
+    }
+}    
+
 class Ball extends GameObject {
     radius: number = 10;
     pickedUp: boolean = false;
@@ -283,8 +347,13 @@ class Ball extends GameObject {
     immunityTimer: number = 0;
     throwImmunity: number = 10;
 
-    constructor(Position: [number, number], Velocity: [number, number]) {
-        super(Position, Velocity);
+    constructor() {
+        super([window.innerWidth / 2, window.innerHeight / 2], [0, 0]);
+    }
+
+    reset(){
+        this.Position = [window.innerWidth / 2, window.innerHeight / 2];
+        this.Velocity = [0, 0];
     }
 
     update(): void {
@@ -292,8 +361,8 @@ class Ball extends GameObject {
         // If picked up, we don't want to run any logic besides updating position
         if (this.pickedUp) {
             for (let player of Players) if (player.hasBall) {
-                this.Position[0] = player.Characters[player.selectedCharacter].Position[0];
-                this.Position[1] = player.Characters[player.selectedCharacter].Position[1];
+                this.Position[0] = player.Characters[player.selectedCharacter].Position[0] + player.Characters[player.selectedCharacter].width/2;
+                this.Position[1] = player.Characters[player.selectedCharacter].Position[1] - 30;
             }
             return;
         }
@@ -311,6 +380,10 @@ class Ball extends GameObject {
 
         // Move ball
         this.move();
+
+        // Check for goal
+        for (let goal of Goals) if(this.checkCollision(goal)) game.goalScored(goal.team);
+        
 
         if (this.immunityTimer > 0) {
             this.immunityTimer--;
@@ -622,7 +695,6 @@ abstract class Character extends GameObject {
         ball.pickedUp = true;
         ball.team = this.team;
         Players[this.team].hasBall = true;
-        console.log("pickup")
     }
 
     dropBall() {
@@ -637,10 +709,11 @@ abstract class Character extends GameObject {
         ball.pickedUp = false;
         Players[this.team].hasBall = false;
 
+        ball.Position = [this.Position[0] + this.width / 2, this.Position[1] + this.height / 2];
+
         let theta = Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0]);
         ball.Velocity = [this.ballThrowSpeed * Math.cos(theta), this.ballThrowSpeed * Math.sin(theta)]
         ball.immunityTimer = ball.throwImmunity;
-        console.log("throw")
     }
 
     abstract update(): void;
@@ -671,7 +744,7 @@ abstract class Character extends GameObject {
 
         for (let j = 0; j < Players[this.team].Characters.length; j++) {
             if (Players[this.team].Characters[j] == this) {
-                this.Position = [50 + (-100 * this.team) - (this.width * this.team) + (window.innerWidth * this.team), window.innerHeight / 2 - this.height / 2 + 3 * (j - 1) * this.height];
+                this.Position = [100 + (-200 * this.team) - (this.width * this.team) + (window.innerWidth * this.team), window.innerHeight / 2 - this.height / 2 + 3 * (j - 1) * this.height];
                 return;
             }
         }
@@ -981,9 +1054,8 @@ var context = canvas.getContext("2d");
 context.canvas.width = window.innerWidth;
 context.canvas.height = window.innerHeight;
 
-//HTML Elements
-var debugOutput1 = document.getElementById("debug1");
-var debugOutput2 = document.getElementById("debug2");
+// Initiate game (stores game related variables)
+var game = new Game();
 
 // Define global variables
 const frameRate = 60;
@@ -993,10 +1065,11 @@ const attackPreviewStyle = "rgba(0, 0, 0, 0.1)";
 // Define global arrays
 var Gamepads: Array<Gamepad> = [];
 var Players: Array<Player> = [new Player(0), new Player(1)];
+var Goals: Array<Goal> = [new Goal([30, window.innerHeight/2 - 50], 30, 100, 1), new Goal([window.innerWidth - 60, window.innerHeight/2 - 50], 30, 100, 0)];
 var Objects: Array<CollidableObject> = [new Box([window.innerWidth / 2 - 250, window.innerHeight / 2 - 50], 100, 100), new Box([window.innerWidth / 2 + 150, window.innerHeight / 2 - 50], 100, 100)];
 
 // Ball
-var ball = new Ball([window.innerWidth / 2, window.innerHeight / 2], [0, 0]);
+var ball = new Ball();
 
 // Add walls
 Objects.push(new Box([0, -5], window.innerWidth, 10));
@@ -1004,9 +1077,10 @@ Objects.push(new Box([-5, 0], 10, window.innerHeight));
 Objects.push(new Box([0, window.innerHeight - 5], window.innerWidth, 10));
 Objects.push(new Box([window.innerWidth - 5, 0], 10, window.innerHeight));
 
-reset();
+// Initiate game (resets field, sets characters by grabbing them from local storage, etc)
+game.init();
 
-// Handle controllers (this isn't actually used since the controllers are queried every frame, but it might be helpful later)
+// Handle controllers (this isn't actually used since the controllers are queried every frame, but it might be helpful later) Note: it was not helpful later
 window.addEventListener("gamepadconnected", function (e) { gamepadHandler(e, true); }, false);
 window.addEventListener("gamepaddisconnected", function (e) { gamepadHandler(e, false); }, false);
 
@@ -1014,12 +1088,6 @@ function gamepadHandler(event, connecting) {
     var gamepad = event.gamepad;
     // gamepad === navigator.getGamepads()[gamepad.index]
     console.log("Debug: Change with gamepad. Id: " + gamepad.id)
-}
-
-function reset() {
-    for (let player of Players) {
-        player.resetCharacters();
-    }
 }
 
 // Start animation loop
@@ -1065,6 +1133,8 @@ function querryControllers() {
 }
 
 function update() {
+    if(game.paused) return; // If the game is paused, don't update anything
+
     ball.update();
 
     for (const player of Players) {
@@ -1074,10 +1144,16 @@ function update() {
     for (const object of Objects) {
         object.update();
     }
+
+    for (const goal of Goals) {
+        goal.update();
+    }
 }
 
 function draw() {
     clearCanvas();
+
+    game.display();
 
     ball.draw();
 
@@ -1088,68 +1164,12 @@ function draw() {
     for (const object of Objects) {
         object.draw();
     }
+
+    for (const goal of Goals) {
+        goal.draw();
+    }
 }
 
-function debug() {
-
-    let buttonOutput = "";
-
-    // // Right now this just turns the buttons into strings then modifies some h1 element to display them
-    // // Controller 1
-    // buttonOutput += "A: " + Players[0].Buttons.a + "\n";
-    // buttonOutput += "B: " + Players[0].Buttons.b + "\n";
-    // buttonOutput += "X: " + Players[0].Buttons.x + "\n";
-    // buttonOutput += "Y: " + Players[0].Buttons.y + "\n";
-    // buttonOutput += "Left Shoulder: " + Players[0].Buttons.leftShoulder + "\n";
-    // buttonOutput += "Right Shoulder: " + Players[0].Buttons.rightShoulder + "\n";
-    // buttonOutput += "Left Trigger: " + Players[0].Buttons.leftTrigger + "\n";
-    // buttonOutput += "Right Trigger: " + Players[0].Buttons.rightTrigger + "\n";
-    // buttonOutput += "Dpad Up: " + Players[0].Buttons.dpadUp + "\n";
-    // buttonOutput += "Dpad Down: " + Players[0].Buttons.dpadDown + "\n";
-    // buttonOutput += "Dpad Left: " + Players[0].Buttons.dpadLeft + "\n";
-    // buttonOutput += "Dpad Right: " + Players[0].Buttons.dpadRight + "\n";
-    // buttonOutput += "Settings: " + Players[0].Buttons.settings + "\n";
-    // buttonOutput += "View: " + Players[0].Buttons.view + "\n";
-    // buttonOutput += "Left Stick Press: " + Players[0].Buttons.leftStickPress + "\n";
-    // buttonOutput += "Right Stick Press: " + Players[0].Buttons.rightStickPress + "\n";
-    // buttonOutput += "Left Stick: " + Players[0].Buttons.leftStick + "\n";
-    // buttonOutput += "Right Stick: " + Players[0].Buttons.rightStick + "\n";
-    // debugOutput1.innerText = buttonOutput;
-
-    // // Controller 2
-    // buttonOutput = "";
-    // buttonOutput += "A: " + Players[1].Buttons.a + "\n";
-    // buttonOutput += "B: " + Players[1].Buttons.b + "\n";
-    // buttonOutput += "X: " + Players[1].Buttons.x + "\n";
-    // buttonOutput += "Y: " + Players[1].Buttons.y + "\n";
-    // buttonOutput += "Left Shoulder: " + Players[1].Buttons.leftShoulder + "\n";
-    // buttonOutput += "Right Shoulder: " + Players[1].Buttons.rightShoulder + "\n";
-    // buttonOutput += "Left Trigger: " + Players[1].Buttons.leftTrigger + "\n";
-    // buttonOutput += "Right Trigger: " + Players[1].Buttons.rightTrigger + "\n";
-    // buttonOutput += "Dpad Up: " + Players[1].Buttons.dpadUp + "\n";
-    // buttonOutput += "Dpad Down: " + Players[1].Buttons.dpadDown + "\n";
-    // buttonOutput += "Dpad Left: " + Players[1].Buttons.dpadLeft + "\n";
-    // buttonOutput += "Dpad Right: " + Players[1].Buttons.dpadRight + "\n";
-    // buttonOutput += "Settings: " + Players[1].Buttons.settings + "\n";
-    // buttonOutput += "View: " + Players[1].Buttons.view + "\n";
-    // buttonOutput += "Left Stick Press: " + Players[1].Buttons.leftStickPress + "\n";
-    // buttonOutput += "Right Stick Press: " + Players[1].Buttons.rightStickPress + "\n";
-    // buttonOutput += "Left Stick: " + Players[1].Buttons.leftStick + "\n";
-    // buttonOutput += "Right Stick: " + Players[1].Buttons.rightStick + "\n";
-    // debugOutput2.innerText = buttonOutput;
-
-    // // Character switcher
-    // buttonOutput = `Players 1 character: ${Players[0].selectedCharacter}\nPlayers 2 character: ${Players[1].selectedCharacter}\n`;
-    // debugOutput1.innerText = buttonOutput;
-
-
-    // Checking for joystick normalization
-    buttonOutput = "";
-    let leftMag = Math.sqrt(Math.pow(Players[0].Buttons.leftStick[0], 2) + Math.pow(Players[0].Buttons.leftStick[1], 2))
-    buttonOutput = `Left Stick Magnitude: ${leftMag}\n`;
-    buttonOutput += `Right Stick Magnitude: ${Math.sqrt(Math.pow(Players[0].Buttons.rightStick[0], 2) + Math.pow(Players[0].Buttons.rightStick[1], 2))}\n`;
-    debugOutput1.innerText = buttonOutput;
-}
 
 function clearCanvas() {
     context.fillStyle = 'rgba(255, 255, 255)';

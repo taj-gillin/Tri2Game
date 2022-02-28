@@ -13,8 +13,48 @@ var __extends = (this && this.__extends) || (function () {
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
-console.log(window.innerHeight);
-console.log(window.innerWidth);
+var Game = /** @class */ (function () {
+    function Game() {
+        this.score = [0, 0];
+        this.minWinScore = 3;
+        this.paused = false;
+    }
+    Game.prototype.init = function () {
+        this.resetField();
+    };
+    Game.prototype.goalScored = function (team) {
+        this.score[team]++;
+        if (this.score[team] >= this.minWinScore) {
+            this.endGame(team);
+        }
+        this.resetField();
+    };
+    Game.prototype.endGame = function (team) {
+        localStorage.setItem("winner", team.toString());
+        window.location.href = "../win/index.html";
+    };
+    Game.prototype.resetField = function () {
+        ball.reset();
+        for (var _i = 0, Players_1 = Players; _i < Players_1.length; _i++) {
+            var player = Players_1[_i];
+            player.resetCharacters();
+        }
+    };
+    Game.prototype.display = function () {
+        this.displayScore();
+    };
+    Game.prototype.displayScore = function () {
+        context.font = "60px Arial";
+        context.textAlign = "center";
+        context.fillStyle = "blue";
+        context.fillText("" + this.score[0], canvas.width / 2 - 30, 65);
+        context.fillStyle = "black";
+        context.fillText(" - ", canvas.width / 2, 65);
+        context.fillStyle = "red";
+        context.fillText("" + this.score[1], canvas.width / 2 + 30, 65);
+    };
+    return Game;
+}());
 // Define classes
 var Player = /** @class */ (function () {
     function Player(controllerNumber) {
@@ -243,10 +283,24 @@ var Box = /** @class */ (function (_super) {
     };
     return Box;
 }(CollidableObject));
+var Goal = /** @class */ (function (_super) {
+    __extends(Goal, _super);
+    function Goal(Position, width, height, team) {
+        var _this = _super.call(this, Position, width, height) || this;
+        _this.team = team;
+        return _this;
+    }
+    Goal.prototype.update = function () { };
+    Goal.prototype.draw = function () {
+        context.fillStyle = "green";
+        context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
+    };
+    return Goal;
+}(CollidableObject));
 var Ball = /** @class */ (function (_super) {
     __extends(Ball, _super);
-    function Ball(Position, Velocity) {
-        var _this = _super.call(this, Position, Velocity) || this;
+    function Ball() {
+        var _this = _super.call(this, [window.innerWidth / 2, window.innerHeight / 2], [0, 0]) || this;
         _this.radius = 10;
         _this.pickedUp = false;
         _this.team = -1;
@@ -255,14 +309,18 @@ var Ball = /** @class */ (function (_super) {
         _this.throwImmunity = 10;
         return _this;
     }
+    Ball.prototype.reset = function () {
+        this.Position = [window.innerWidth / 2, window.innerHeight / 2];
+        this.Velocity = [0, 0];
+    };
     Ball.prototype.update = function () {
         // If picked up, we don't want to run any logic besides updating position
         if (this.pickedUp) {
-            for (var _i = 0, Players_1 = Players; _i < Players_1.length; _i++) {
-                var player = Players_1[_i];
+            for (var _i = 0, Players_2 = Players; _i < Players_2.length; _i++) {
+                var player = Players_2[_i];
                 if (player.hasBall) {
-                    this.Position[0] = player.Characters[player.selectedCharacter].Position[0];
-                    this.Position[1] = player.Characters[player.selectedCharacter].Position[1];
+                    this.Position[0] = player.Characters[player.selectedCharacter].Position[0] + player.Characters[player.selectedCharacter].width / 2;
+                    this.Position[1] = player.Characters[player.selectedCharacter].Position[1] - 30;
                 }
             }
             return;
@@ -277,15 +335,21 @@ var Ball = /** @class */ (function (_super) {
         this.Velocity[1] *= this.drag;
         // Move ball
         this.move();
+        // Check for goal
+        for (var _a = 0, Goals_1 = Goals; _a < Goals_1.length; _a++) {
+            var goal = Goals_1[_a];
+            if (this.checkCollision(goal))
+                game.goalScored(goal.team);
+        }
         if (this.immunityTimer > 0) {
             this.immunityTimer--;
             return;
         }
         // Check for collisions with players
-        for (var _a = 0, Players_2 = Players; _a < Players_2.length; _a++) {
-            var player = Players_2[_a];
-            for (var _b = 0, _c = player.Characters; _b < _c.length; _b++) { // Iterate through all characters
-                var character = _c[_b];
+        for (var _b = 0, Players_3 = Players; _b < Players_3.length; _b++) {
+            var player = Players_3[_b];
+            for (var _c = 0, _d = player.Characters; _c < _d.length; _c++) { // Iterate through all characters
+                var character = _d[_c];
                 if (this.checkCollision(character)) {
                     character.pickupBall();
                 }
@@ -553,7 +617,6 @@ var Character = /** @class */ (function (_super) {
         ball.pickedUp = true;
         ball.team = this.team;
         Players[this.team].hasBall = true;
-        console.log("pickup");
     };
     Character.prototype.dropBall = function () {
         ball.pickedUp = false;
@@ -564,10 +627,10 @@ var Character = /** @class */ (function (_super) {
         this.cooldownTimer = this.cooldown;
         ball.pickedUp = false;
         Players[this.team].hasBall = false;
+        ball.Position = [this.Position[0] + this.width / 2, this.Position[1] + this.height / 2];
         var theta = Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0]);
         ball.Velocity = [this.ballThrowSpeed * Math.cos(theta), this.ballThrowSpeed * Math.sin(theta)];
         ball.immunityTimer = ball.throwImmunity;
-        console.log("throw");
     };
     Character.prototype.drawThrowPreview = function () {
         context.lineWidth = 10;
@@ -587,7 +650,7 @@ var Character = /** @class */ (function (_super) {
         this.respawnTimer = 0;
         for (var j = 0; j < Players[this.team].Characters.length; j++) {
             if (Players[this.team].Characters[j] == this) {
-                this.Position = [50 + (-100 * this.team) - (this.width * this.team) + (window.innerWidth * this.team), window.innerHeight / 2 - this.height / 2 + 3 * (j - 1) * this.height];
+                this.Position = [100 + (-200 * this.team) - (this.width * this.team) + (window.innerWidth * this.team), window.innerHeight / 2 - this.height / 2 + 3 * (j - 1) * this.height];
                 return;
             }
         }
@@ -857,9 +920,8 @@ var canvas = document.getElementById("canvas");
 var context = canvas.getContext("2d");
 context.canvas.width = window.innerWidth;
 context.canvas.height = window.innerHeight;
-//HTML Elements
-var debugOutput1 = document.getElementById("debug1");
-var debugOutput2 = document.getElementById("debug2");
+// Initiate game (stores game related variables)
+var game = new Game();
 // Define global variables
 var frameRate = 60;
 var state = "playing";
@@ -867,28 +929,24 @@ var attackPreviewStyle = "rgba(0, 0, 0, 0.1)";
 // Define global arrays
 var Gamepads = [];
 var Players = [new Player(0), new Player(1)];
+var Goals = [new Goal([30, window.innerHeight / 2 - 50], 30, 100, 1), new Goal([window.innerWidth - 60, window.innerHeight / 2 - 50], 30, 100, 0)];
 var Objects = [new Box([window.innerWidth / 2 - 250, window.innerHeight / 2 - 50], 100, 100), new Box([window.innerWidth / 2 + 150, window.innerHeight / 2 - 50], 100, 100)];
 // Ball
-var ball = new Ball([window.innerWidth / 2, window.innerHeight / 2], [0, 0]);
+var ball = new Ball();
 // Add walls
 Objects.push(new Box([0, -5], window.innerWidth, 10));
 Objects.push(new Box([-5, 0], 10, window.innerHeight));
 Objects.push(new Box([0, window.innerHeight - 5], window.innerWidth, 10));
 Objects.push(new Box([window.innerWidth - 5, 0], 10, window.innerHeight));
-reset();
-// Handle controllers (this isn't actually used since the controllers are queried every frame, but it might be helpful later)
+// Initiate game (resets field, sets characters by grabbing them from local storage, etc)
+game.init();
+// Handle controllers (this isn't actually used since the controllers are queried every frame, but it might be helpful later) Note: it was not helpful later
 window.addEventListener("gamepadconnected", function (e) { gamepadHandler(e, true); }, false);
 window.addEventListener("gamepaddisconnected", function (e) { gamepadHandler(e, false); }, false);
 function gamepadHandler(event, connecting) {
     var gamepad = event.gamepad;
     // gamepad === navigator.getGamepads()[gamepad.index]
     console.log("Debug: Change with gamepad. Id: " + gamepad.id);
-}
-function reset() {
-    for (var _i = 0, Players_3 = Players; _i < Players_3.length; _i++) {
-        var player = Players_3[_i];
-        player.resetCharacters();
-    }
 }
 // Start animation loop
 setInterval(animate, 1000 / frameRate);
@@ -926,6 +984,8 @@ function querryControllers() {
     }
 }
 function update() {
+    if (game.paused)
+        return; // If the game is paused, don't update anything
     ball.update();
     for (var _i = 0, Players_4 = Players; _i < Players_4.length; _i++) {
         var player = Players_4[_i];
@@ -935,9 +995,14 @@ function update() {
         var object = Objects_7[_a];
         object.update();
     }
+    for (var _b = 0, Goals_2 = Goals; _b < Goals_2.length; _b++) {
+        var goal = Goals_2[_b];
+        goal.update();
+    }
 }
 function draw() {
     clearCanvas();
+    game.display();
     ball.draw();
     for (var _i = 0, Players_5 = Players; _i < Players_5.length; _i++) {
         var player = Players_5[_i];
@@ -947,60 +1012,10 @@ function draw() {
         var object = Objects_8[_a];
         object.draw();
     }
-}
-function debug() {
-    var buttonOutput = "";
-    // // Right now this just turns the buttons into strings then modifies some h1 element to display them
-    // // Controller 1
-    // buttonOutput += "A: " + Players[0].Buttons.a + "\n";
-    // buttonOutput += "B: " + Players[0].Buttons.b + "\n";
-    // buttonOutput += "X: " + Players[0].Buttons.x + "\n";
-    // buttonOutput += "Y: " + Players[0].Buttons.y + "\n";
-    // buttonOutput += "Left Shoulder: " + Players[0].Buttons.leftShoulder + "\n";
-    // buttonOutput += "Right Shoulder: " + Players[0].Buttons.rightShoulder + "\n";
-    // buttonOutput += "Left Trigger: " + Players[0].Buttons.leftTrigger + "\n";
-    // buttonOutput += "Right Trigger: " + Players[0].Buttons.rightTrigger + "\n";
-    // buttonOutput += "Dpad Up: " + Players[0].Buttons.dpadUp + "\n";
-    // buttonOutput += "Dpad Down: " + Players[0].Buttons.dpadDown + "\n";
-    // buttonOutput += "Dpad Left: " + Players[0].Buttons.dpadLeft + "\n";
-    // buttonOutput += "Dpad Right: " + Players[0].Buttons.dpadRight + "\n";
-    // buttonOutput += "Settings: " + Players[0].Buttons.settings + "\n";
-    // buttonOutput += "View: " + Players[0].Buttons.view + "\n";
-    // buttonOutput += "Left Stick Press: " + Players[0].Buttons.leftStickPress + "\n";
-    // buttonOutput += "Right Stick Press: " + Players[0].Buttons.rightStickPress + "\n";
-    // buttonOutput += "Left Stick: " + Players[0].Buttons.leftStick + "\n";
-    // buttonOutput += "Right Stick: " + Players[0].Buttons.rightStick + "\n";
-    // debugOutput1.innerText = buttonOutput;
-    // // Controller 2
-    // buttonOutput = "";
-    // buttonOutput += "A: " + Players[1].Buttons.a + "\n";
-    // buttonOutput += "B: " + Players[1].Buttons.b + "\n";
-    // buttonOutput += "X: " + Players[1].Buttons.x + "\n";
-    // buttonOutput += "Y: " + Players[1].Buttons.y + "\n";
-    // buttonOutput += "Left Shoulder: " + Players[1].Buttons.leftShoulder + "\n";
-    // buttonOutput += "Right Shoulder: " + Players[1].Buttons.rightShoulder + "\n";
-    // buttonOutput += "Left Trigger: " + Players[1].Buttons.leftTrigger + "\n";
-    // buttonOutput += "Right Trigger: " + Players[1].Buttons.rightTrigger + "\n";
-    // buttonOutput += "Dpad Up: " + Players[1].Buttons.dpadUp + "\n";
-    // buttonOutput += "Dpad Down: " + Players[1].Buttons.dpadDown + "\n";
-    // buttonOutput += "Dpad Left: " + Players[1].Buttons.dpadLeft + "\n";
-    // buttonOutput += "Dpad Right: " + Players[1].Buttons.dpadRight + "\n";
-    // buttonOutput += "Settings: " + Players[1].Buttons.settings + "\n";
-    // buttonOutput += "View: " + Players[1].Buttons.view + "\n";
-    // buttonOutput += "Left Stick Press: " + Players[1].Buttons.leftStickPress + "\n";
-    // buttonOutput += "Right Stick Press: " + Players[1].Buttons.rightStickPress + "\n";
-    // buttonOutput += "Left Stick: " + Players[1].Buttons.leftStick + "\n";
-    // buttonOutput += "Right Stick: " + Players[1].Buttons.rightStick + "\n";
-    // debugOutput2.innerText = buttonOutput;
-    // // Character switcher
-    // buttonOutput = `Players 1 character: ${Players[0].selectedCharacter}\nPlayers 2 character: ${Players[1].selectedCharacter}\n`;
-    // debugOutput1.innerText = buttonOutput;
-    // Checking for joystick normalization
-    buttonOutput = "";
-    var leftMag = Math.sqrt(Math.pow(Players[0].Buttons.leftStick[0], 2) + Math.pow(Players[0].Buttons.leftStick[1], 2));
-    buttonOutput = "Left Stick Magnitude: " + leftMag + "\n";
-    buttonOutput += "Right Stick Magnitude: " + Math.sqrt(Math.pow(Players[0].Buttons.rightStick[0], 2) + Math.pow(Players[0].Buttons.rightStick[1], 2)) + "\n";
-    debugOutput1.innerText = buttonOutput;
+    for (var _b = 0, Goals_3 = Goals; _b < Goals_3.length; _b++) {
+        var goal = Goals_3[_b];
+        goal.draw();
+    }
 }
 function clearCanvas() {
     context.fillStyle = 'rgba(255, 255, 255)';
