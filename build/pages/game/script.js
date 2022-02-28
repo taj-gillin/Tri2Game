@@ -13,6 +13,8 @@ var __extends = (this && this.__extends) || (function () {
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
+console.log(window.innerHeight);
+console.log(window.innerWidth);
 // Define classes
 var Player = /** @class */ (function () {
     function Player(controllerNumber) {
@@ -163,7 +165,12 @@ var Player = /** @class */ (function () {
     };
     Player.prototype.draw = function () {
         if (this.attackHoldTime > 0 && this.Characters[this.selectedCharacter].cooldownTimer == 0 && this.Characters[this.selectedCharacter].respawnTimer == 0) {
-            this.Characters[this.selectedCharacter].drawAttackPreview();
+            if (this.hasBall) {
+                this.Characters[this.selectedCharacter].drawThrowPreview();
+            }
+            else {
+                this.Characters[this.selectedCharacter].drawAttackPreview();
+            }
         }
         for (var _i = 0, _a = this.Characters; _i < _a.length; _i++) {
             var character = _a[_i];
@@ -243,9 +250,9 @@ var Ball = /** @class */ (function (_super) {
         _this.radius = 10;
         _this.pickedUp = false;
         _this.team = -1;
-        _this.drag = 0.98;
+        _this.drag = 0.985;
         _this.immunityTimer = 0;
-        _this.throwImmunity = 60;
+        _this.throwImmunity = 10;
         return _this;
     }
     Ball.prototype.update = function () {
@@ -253,19 +260,23 @@ var Ball = /** @class */ (function (_super) {
         if (this.pickedUp) {
             for (var _i = 0, Players_1 = Players; _i < Players_1.length; _i++) {
                 var player = Players_1[_i];
-                if (player.hasBall)
-                    this.Position = player.Characters[player.selectedCharacter].Position;
+                if (player.hasBall) {
+                    this.Position[0] = player.Characters[player.selectedCharacter].Position[0];
+                    this.Position[1] = player.Characters[player.selectedCharacter].Position[1];
+                }
             }
             return;
         }
         // Clip small velocities
-        if (Math.abs(this.Velocity[0]) < 0.1)
+        if (Math.sqrt(Math.pow(this.Velocity[0], 2) + Math.pow(this.Velocity[1], 2)) < 5) {
             this.Velocity[0] = 0;
-        if (Math.abs(this.Velocity[1]) < 0.1)
             this.Velocity[1] = 0;
-        // Apply drag (this system is mediocre and needs to be plotted on a curve in the future)
+        }
+        // Apply drag (this system is mediocre and needs to be plotted on a curve in the future)5
         this.Velocity[0] *= this.drag;
         this.Velocity[1] *= this.drag;
+        // Move ball
+        this.move();
         if (this.immunityTimer > 0) {
             this.immunityTimer--;
             return;
@@ -280,8 +291,6 @@ var Ball = /** @class */ (function (_super) {
                 }
             }
         }
-        // Move ball
-        this.move();
     };
     Ball.prototype.move = function () {
         if (Math.abs(this.Velocity[0]) > 0)
@@ -497,9 +506,9 @@ var Character = /** @class */ (function (_super) {
         _this.direction = "DOWN";
         _this.frame = 0;
         _this.delay = 0;
-        // Ball variables
-        _this.ballThrowSpeed = 5;
         _this.spritePadding = { width: (64 - _this.width) / 2, height: (64 - _this.height) }; // This is used because the sprites are 64x64, but some of that is empty space used for larger animations and I don't want that. The width is what is cut off of both sides, the height is what is cut off of the top.
+        // Ball variables
+        _this.ballThrowSpeed = 11;
         _this.speedScalar = speedScalar;
         _this.team = team;
         _this.cooldown = Math.floor(cooldown * frameRate / 1000); // Converts from milliseconds to frames
@@ -544,6 +553,7 @@ var Character = /** @class */ (function (_super) {
         ball.pickedUp = true;
         ball.team = this.team;
         Players[this.team].hasBall = true;
+        console.log("pickup");
     };
     Character.prototype.dropBall = function () {
         ball.pickedUp = false;
@@ -551,15 +561,27 @@ var Character = /** @class */ (function (_super) {
         ball.team = -1;
     };
     Character.prototype.throwBall = function () {
+        this.cooldownTimer = this.cooldown;
         ball.pickedUp = false;
         Players[this.team].hasBall = false;
         var theta = Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0]);
         ball.Velocity = [this.ballThrowSpeed * Math.cos(theta), this.ballThrowSpeed * Math.sin(theta)];
         ball.immunityTimer = ball.throwImmunity;
-        alert("throw");
+        console.log("throw");
+    };
+    Character.prototype.drawThrowPreview = function () {
+        context.lineWidth = 10;
+        context.strokeStyle = attackPreviewStyle;
+        context.beginPath();
+        context.moveTo(this.Position[0] + this.width / 2, this.Position[1] + this.height / 2);
+        context.lineTo(this.Position[0] + this.width / 2 + 400 * Math.cos(Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0])), this.Position[1] + this.height / 2 + 400 * Math.sin(Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0])));
+        context.stroke();
     };
     Character.prototype.die = function () {
+        this.Position = [-100, -100];
         this.respawnTimer = this.respawnTime;
+        if (Players[this.team].hasBall && Players[this.team].Characters[Players[this.team].selectedCharacter] == this)
+            this.dropBall();
     };
     Character.prototype.respawn = function () {
         this.respawnTimer = 0;
@@ -779,7 +801,7 @@ var Esteban = /** @class */ (function (_super) {
     function Esteban(team) {
         var _this = _super.call(this, 4, 1000, team) || this;
         _this.Arrows = [];
-        _this.maxTime = 600; // Time until full distance/min spread shot in milliseconds
+        _this.maxTime = 1200; // Time until full distance/min spread shot in milliseconds
         _this.arrowInfo = {
             distance: 2000,
             travelTime: _this.maxTime * (frameRate / 1000),
@@ -821,7 +843,8 @@ var Esteban = /** @class */ (function (_super) {
         this.Arrows.push(arrow);
     };
     Esteban.prototype.drawAttackPreview = function () {
-        context.fillStyle = attackPreviewStyle;
+        context.lineWidth = 3;
+        context.strokeStyle = attackPreviewStyle;
         context.beginPath();
         context.moveTo(this.Position[0] + this.width / 2, this.Position[1] + this.height / 2);
         context.lineTo(this.Position[0] + this.width / 2 + this.arrowInfo.distance * Math.cos(Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0])), this.Position[1] + this.height / 2 + this.arrowInfo.distance * Math.sin(Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0])));

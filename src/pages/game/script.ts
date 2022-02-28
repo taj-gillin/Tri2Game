@@ -1,3 +1,5 @@
+console.log(window.innerHeight)
+console.log(window.innerWidth)
 // Define types
 type Buttons = {
     a: boolean;
@@ -182,7 +184,11 @@ class Player {
 
     draw() {
         if (this.attackHoldTime > 0 && this.Characters[this.selectedCharacter].cooldownTimer == 0 && this.Characters[this.selectedCharacter].respawnTimer == 0) {
-            this.Characters[this.selectedCharacter].drawAttackPreview();
+            if (this.hasBall) {
+                this.Characters[this.selectedCharacter].drawThrowPreview();
+            } else {
+                this.Characters[this.selectedCharacter].drawAttackPreview();
+            }
         }
 
         for (let character of this.Characters) {
@@ -273,9 +279,9 @@ class Ball extends GameObject {
     radius: number = 10;
     pickedUp: boolean = false;
     team: number = -1;
-    drag: number = 0.98;
+    drag: number = 0.985;
     immunityTimer: number = 0;
-    throwImmunity: number = 60;
+    throwImmunity: number = 10;
 
     constructor(Position: [number, number], Velocity: [number, number]) {
         super(Position, Velocity);
@@ -283,42 +289,47 @@ class Ball extends GameObject {
 
     update(): void {
 
-
         // If picked up, we don't want to run any logic besides updating position
         if (this.pickedUp) {
-            for (let player of Players) if (player.hasBall) this.Position = player.Characters[player.selectedCharacter].Position;
+            for (let player of Players) if (player.hasBall) {
+                this.Position[0] = player.Characters[player.selectedCharacter].Position[0];
+                this.Position[1] = player.Characters[player.selectedCharacter].Position[1];
+            }
             return;
         }
 
-
         // Clip small velocities
-        if (Math.abs(this.Velocity[0]) < 0.1) this.Velocity[0] = 0;
-        if (Math.abs(this.Velocity[1]) < 0.1) this.Velocity[1] = 0;
+        if (Math.sqrt(Math.pow(this.Velocity[0], 2) + Math.pow(this.Velocity[1], 2)) < 5) {
+            this.Velocity[0] = 0;
+            this.Velocity[1] = 0;
+        }
 
-        // Apply drag (this system is mediocre and needs to be plotted on a curve in the future)
+        // Apply drag (this system is mediocre and needs to be plotted on a curve in the future)5
+
         this.Velocity[0] *= this.drag;
         this.Velocity[1] *= this.drag;
 
-        if(this.immunityTimer > 0) {
+        // Move ball
+        this.move();
+
+        if (this.immunityTimer > 0) {
             this.immunityTimer--;
             return;
         }
 
         // Check for collisions with players
-          for (let player of Players) for (let character of player.Characters) { // Iterate through all characters
+        for (let player of Players) for (let character of player.Characters) { // Iterate through all characters
             if (this.checkCollision(character)) {
                 character.pickupBall();
             }
         }
-
-        // Move ball
-        this.move();
     }
     move() {
 
         if (Math.abs(this.Velocity[0]) > 0) this.moveX();
         if (Math.abs(this.Velocity[1]) > 0) this.moveY();
     }
+
 
     // I should turn these two into one function at some point
     moveX() {
@@ -363,7 +374,7 @@ class Ball extends GameObject {
         return false;
     }
 
-    
+
     draw(): void {
         context.fillStyle = "black";
         context.beginPath();
@@ -556,14 +567,10 @@ abstract class Character extends GameObject {
     direction: "UP" | "DOWN" | "LEFT" | "RIGHT" = "DOWN";
     frame: number = 0;
     delay: number = 0;
+    spritePadding: { width: number, height: number } = { width: (64 - this.width) / 2, height: (64 - this.height) }; // This is used because the sprites are 64x64, but some of that is empty space used for larger animations and I don't want that. The width is what is cut off of both sides, the height is what is cut off of the top.
 
     // Ball variables
-    ballThrowSpeed: number = 5;
-
-
-
-
-    spritePadding: { width: number, height: number } = { width: (64 - this.width) / 2, height: (64 - this.height) }; // This is used because the sprites are 64x64, but some of that is empty space used for larger animations and I don't want that. The width is what is cut off of both sides, the height is what is cut off of the top.
+    ballThrowSpeed: number = 11;
 
 
 
@@ -615,6 +622,7 @@ abstract class Character extends GameObject {
         ball.pickedUp = true;
         ball.team = this.team;
         Players[this.team].hasBall = true;
+        console.log("pickup")
     }
 
     dropBall() {
@@ -624,13 +632,15 @@ abstract class Character extends GameObject {
     }
 
     throwBall() {
+        this.cooldownTimer = this.cooldown;
+
         ball.pickedUp = false;
         Players[this.team].hasBall = false;
 
         let theta = Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0]);
         ball.Velocity = [this.ballThrowSpeed * Math.cos(theta), this.ballThrowSpeed * Math.sin(theta)]
         ball.immunityTimer = ball.throwImmunity;
-        alert("throw")
+        console.log("throw")
     }
 
     abstract update(): void;
@@ -641,13 +651,23 @@ abstract class Character extends GameObject {
 
     abstract drawAttackPreview(): void;
 
+    drawThrowPreview(): void {
+        context.lineWidth = 10;
+        context.strokeStyle = attackPreviewStyle;
+        context.beginPath();
+        context.moveTo(this.Position[0] + this.width / 2, this.Position[1] + this.height / 2);
+        context.lineTo(this.Position[0] + this.width / 2 + 400 * Math.cos(Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0])), this.Position[1] + this.height / 2 + 400 * Math.sin(Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0])));
+        context.stroke();
+    }
+
     die(): void {
+        this.Position = [-100, -100]
         this.respawnTimer = this.respawnTime;
+        if (Players[this.team].hasBall && Players[this.team].Characters[Players[this.team].selectedCharacter] == this) this.dropBall();
     }
 
     respawn(): void {
         this.respawnTimer = 0;
-
 
         for (let j = 0; j < Players[this.team].Characters.length; j++) {
             if (Players[this.team].Characters[j] == this) {
@@ -896,7 +916,7 @@ class Esteban extends Character {
         distance: number,
         travelTime: number,
     }
-    maxTime: number = 600; // Time until full distance/min spread shot in milliseconds
+    maxTime: number = 1200; // Time until full distance/min spread shot in milliseconds
 
     constructor(team: number) {
         super(4, 1000, team);
@@ -946,7 +966,8 @@ class Esteban extends Character {
     }
 
     drawAttackPreview(): void {
-        context.fillStyle = attackPreviewStyle;
+        context.lineWidth = 3;
+        context.strokeStyle = attackPreviewStyle;
         context.beginPath();
         context.moveTo(this.Position[0] + this.width / 2, this.Position[1] + this.height / 2);
         context.lineTo(this.Position[0] + this.width / 2 + this.arrowInfo.distance * Math.cos(Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0])), this.Position[1] + this.height / 2 + this.arrowInfo.distance * Math.sin(Math.atan2(Players[this.team].Buttons.rightStick[1], Players[this.team].Buttons.rightStick[0])));
