@@ -334,8 +334,9 @@ class Goal extends CollidableObject {
     update(): void { }
 
     draw(): void {
-        context.fillStyle = "green";
-        context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
+
+        context.drawImage(Images["Cannons"], 28 * this.team, 0, 28, 64, this.Position[0], this.Position[1], this.width, this.height);
+
     }
 }    
 
@@ -698,12 +699,15 @@ abstract class Character extends GameObject {
     }
 
     dropBall() {
+        ball.Position = [this.Position[0] + this.width / 2, this.Position[1] + this.height / 2];
         ball.pickedUp = false;
         Players[this.team].hasBall = false;
         ball.team = -1;
     }
 
     throwBall() {
+        if(!Players[this.team].hasBall) return; // Check if player actually has ball. I think there is a bug somewhere that causes the ball to be thrown when the character dies (might be related to the -1 the team gets set to), but I am using this as a hotfix.
+
         this.cooldownTimer = this.cooldown;
 
         ball.pickedUp = false;
@@ -734,9 +738,9 @@ abstract class Character extends GameObject {
     }
 
     die(): void {
+        if (Players[this.team].hasBall && Players[this.team].Characters[Players[this.team].selectedCharacter] == this) this.dropBall();
         this.Position = [-100, -100]
         this.respawnTimer = this.respawnTime;
-        if (Players[this.team].hasBall && Players[this.team].Characters[Players[this.team].selectedCharacter] == this) this.dropBall();
     }
 
     respawn(): void {
@@ -795,13 +799,13 @@ abstract class Character extends GameObject {
             this.frame %= 8;
 
             // Draw
-            context.drawImage(Images[character], (this.width + this.spritePadding.width * 2) * this.frame, (8 + directionShift) * (this.height + this.spritePadding.height), this.width + this.spritePadding.width * 2, this.height + this.spritePadding.height, this.Position[0] - this.spritePadding.width, this.Position[1] - this.spritePadding.height, this.width + this.spritePadding.width * 2, this.height + this.spritePadding.height);
+            context.drawImage(Images[`${character}${this.team}`], (this.width + this.spritePadding.width * 2) * this.frame, (8 + directionShift) * (this.height + this.spritePadding.height), this.width + this.spritePadding.width * 2, this.height + this.spritePadding.height, this.Position[0] - this.spritePadding.width, this.Position[1] - this.spritePadding.height, this.width + this.spritePadding.width * 2, this.height + this.spritePadding.height);
             return;
         }
 
         // Character is not moving
         this.frame = 0;
-        context.drawImage(Images[character], (this.width + this.spritePadding.width * 2) * this.frame, (8 + directionShift) * (this.height + this.spritePadding.height), this.width + this.spritePadding.width * 2, this.height + this.spritePadding.height, this.Position[0] - this.spritePadding.width, this.Position[1] - this.spritePadding.height, this.width + this.spritePadding.width * 2, this.height + this.spritePadding.height);
+        context.drawImage(Images[`${character}${this.team}`], (this.width + this.spritePadding.width * 2) * this.frame, (8 + directionShift) * (this.height + this.spritePadding.height), this.width + this.spritePadding.width * 2, this.height + this.spritePadding.height, this.Position[0] - this.spritePadding.width, this.Position[1] - this.spritePadding.height, this.width + this.spritePadding.width * 2, this.height + this.spritePadding.height);
     }
 }
 
@@ -1060,12 +1064,12 @@ var game = new Game();
 // Define global variables
 const frameRate = 60;
 var state = "playing";
-const attackPreviewStyle = "rgba(0, 0, 0, 0.1)";
+const attackPreviewStyle = "rgba(0, 0, 0, 0.3)";
 
 // Define global arrays
 var Gamepads: Array<Gamepad> = [];
 var Players: Array<Player> = [new Player(0), new Player(1)];
-var Goals: Array<Goal> = [new Goal([30, window.innerHeight/2 - 50], 30, 100, 1), new Goal([window.innerWidth - 60, window.innerHeight/2 - 50], 30, 100, 0)];
+var Goals: Array<Goal> = [new Goal([40, window.innerHeight/2 - 60], 50, 120, 1), new Goal([window.innerWidth - 65, window.innerHeight/2 - 60], 50, 120, 0)];
 var Objects: Array<CollidableObject> = [new Box([window.innerWidth / 2 - 250, window.innerHeight / 2 - 50], 100, 100), new Box([window.innerWidth / 2 + 150, window.innerHeight / 2 - 50], 100, 100)];
 
 // Ball
@@ -1172,18 +1176,29 @@ function draw() {
 
 
 function clearCanvas() {
-    context.fillStyle = 'rgba(255, 255, 255)';
-    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(Images["Background"], 0, 0, canvas.width, canvas.height);
 }
 
 const Images: { [key: string]: HTMLImageElement } = {
-    "Esteban": new Image(),
-    "Shelly": new Image(),
-    "Bill": new Image(),
-    "Mike": new Image(),
+    "Esteban0": new Image(),
+    "Shelly0": new Image(),
+    "Bill0": new Image(),
+    "Mike0": new Image(),
+    "Esteban1": new Image(),
+    "Shelly1": new Image(),
+    "Bill1": new Image(),
+    "Mike1": new Image(),
+    "Cannons": new Image(),
+    "Background": new Image(),
 };
 
-Images["Esteban"].src = "../../../assets/textures/characters/Esteban.png";
-Images["Shelly"].src = "../../../assets/textures/characters/Shelly.png";
-Images["Bill"].src = "../../../assets/textures/characters/Bill.png";
-Images["Mike"].src = "../../../assets/textures/characters/Mike.png";
+Images["Esteban0"].src = "../../../assets/textures/characters/Esteban0.png";
+Images["Shelly0"].src = "../../../assets/textures/characters/Shelly0.png";
+Images["Bill0"].src = "../../../assets/textures/characters/Bill0.png";
+Images["Mike0"].src = "../../../assets/textures/characters/Mike0.png";
+Images["Esteban1"].src = "../../../assets/textures/characters/Esteban1.png";
+Images["Shelly1"].src = "../../../assets/textures/characters/Shelly1.png";
+Images["Bill1"].src = "../../../assets/textures/characters/Bill1.png";
+Images["Mike1"].src = "../../../assets/textures/characters/Mike1.png";
+Images["Cannons"].src = "../../../assets/textures/environment/cannons.png";
+Images["Background"].src = "../../../assets/textures/environment/background.png";
