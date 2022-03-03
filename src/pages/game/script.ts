@@ -34,7 +34,7 @@ class Game {
 
     goalScored(team: number) {
         this.score[team]++;
-        if(this.score[team] >= this.minWinScore) {
+        if (this.score[team] >= this.minWinScore) {
             this.endGame(team);
         }
         this.resetField();
@@ -53,7 +53,7 @@ class Game {
         }
     }
 
-    display(){
+    display() {
         this.displayScore();
     }
 
@@ -157,7 +157,7 @@ class Player {
             rightStick: [0, 0]
         }
 
-        this.Characters = [new Shelly(this.controllerNumber), new Esteban(this.controllerNumber), new Bill(this.controllerNumber)];
+        this.Characters = [new Mike(this.controllerNumber), new Esteban(this.controllerNumber), new Bill(this.controllerNumber)];
     }
 
     update() {
@@ -338,7 +338,7 @@ class Goal extends CollidableObject {
         context.drawImage(Images["Cannons"], 28 * this.team, 0, 28, 64, this.Position[0], this.Position[1], this.width, this.height);
 
     }
-}    
+}
 
 class Ball extends GameObject {
     radius: number = 10;
@@ -352,7 +352,7 @@ class Ball extends GameObject {
         super([window.innerWidth / 2, window.innerHeight / 2], [0, 0]);
     }
 
-    reset(){
+    reset() {
         this.Position = [window.innerWidth / 2, window.innerHeight / 2];
         this.Velocity = [0, 0];
     }
@@ -362,7 +362,7 @@ class Ball extends GameObject {
         // If picked up, we don't want to run any logic besides updating position
         if (this.pickedUp) {
             for (let player of Players) if (player.hasBall) {
-                this.Position[0] = player.Characters[player.selectedCharacter].Position[0] + player.Characters[player.selectedCharacter].width/2;
+                this.Position[0] = player.Characters[player.selectedCharacter].Position[0] + player.Characters[player.selectedCharacter].width / 2;
                 this.Position[1] = player.Characters[player.selectedCharacter].Position[1] - 30;
             }
             return;
@@ -383,8 +383,8 @@ class Ball extends GameObject {
         this.move();
 
         // Check for goal
-        for (let goal of Goals) if(this.checkCollision(goal)) game.goalScored(goal.team);
-        
+        for (let goal of Goals) if (this.checkCollision(goal)) game.goalScored(goal.team);
+
 
         if (this.immunityTimer > 0) {
             this.immunityTimer--;
@@ -506,7 +506,7 @@ class ShotgunBullet extends Bullet {
     }
 
     draw(): void {
-        context.fillStyle = "red";
+        context.fillStyle = "black";
         context.beginPath();
         context.arc(this.Position[0], this.Position[1], 5, 0, 2 * Math.PI);
         context.fill();
@@ -518,7 +518,7 @@ class ShotgunBullet extends Bullet {
 }
 
 class Bomb extends Bullet {
-    timer: number = 2000 * (frameRate / 1000);
+    timer: number = 750 * (frameRate / 1000);
     radius: number;
 
     constructor(Position: [number, number], team: number, radius: number) {
@@ -564,6 +564,48 @@ class Bomb extends Bullet {
 
         return false;
     }
+
+}
+
+class MoneyBag extends Bullet {
+    destination: [number, number];
+    radius: number;
+    vMag: number;
+
+    constructor(Position: [number, number], team: number, radius: number) {
+        super(Position, [0, 0], team);
+        this.radius = radius;
+    }
+
+    draw(): void {
+
+    }
+
+    update(): void {
+
+    }
+
+    explode(): void {
+        for (let character of Players[(this.team + 1) % 2].Characters) {
+            if (this.checkDistance(character)) {
+                character.die();
+            }
+        }
+    }
+
+    checkDistance(character: Character): boolean {
+        if (this.Position[0] + this.radius > character.Position[0] && this.Position[0] - this.radius < character.Position[0] + character.width && this.Position[1] + this.radius > character.Position[1] && this.Position[1] - this.radius < character.Position[1] + character.height) return true;
+
+        let distanceTL = Math.sqrt(Math.pow(character.Position[0] - (this.Position[0]), 2) + Math.pow(character.Position[1] - (this.Position[1]), 2));
+        let distanceTR = Math.sqrt(Math.pow(character.Position[0] + character.width - (this.Position[0]), 2) + Math.pow(character.Position[1] - (this.Position[1]), 2));
+        let distanceBL = Math.sqrt(Math.pow(character.Position[0] - (this.Position[0]), 2) + Math.pow(character.Position[1] + character.height - (this.Position[1]), 2));
+        let distanceBR = Math.sqrt(Math.pow(character.Position[0] + character.width - (this.Position[0]), 2) + Math.pow(character.Position[1] + character.height - (this.Position[1]), 2));
+
+        if (distanceTL < this.radius || distanceTR < this.radius || distanceBL < this.radius || distanceBR < this.radius) return true;
+
+        return false;
+    }
+
 
 }
 
@@ -706,7 +748,7 @@ abstract class Character extends GameObject {
     }
 
     throwBall() {
-        if(!Players[this.team].hasBall) return; // Check if player actually has ball. I think there is a bug somewhere that causes the ball to be thrown when the character dies (might be related to the -1 the team gets set to), but I am using this as a hotfix.
+        if (!Players[this.team].hasBall) return; // Check if player actually has ball. I think there is a bug somewhere that causes the ball to be thrown when the character dies (might be related to the -1 the team gets set to), but I am using this as a hotfix.
 
         this.cooldownTimer = this.cooldown;
 
@@ -903,6 +945,16 @@ class Shelly extends Character {
 
 class Mike extends Character {
 
+    Target: [number, number] = [0, 0];
+    throwTimeMin: number = 1000 * frameRate/1000;
+    throwTimeMax: number = 2000 * frameRate/1000;
+    throwDistanceMax: number = 700;
+    targetMoveSpeed: number = 0.3;
+    minRadius: number = 20;
+    maxRadius: number = 50;
+    MoneyBags: Array<MoneyBag> = [];
+    maxHoldTime: number = 5000 * frameRate/1000;
+
     constructor(team: number) {
         super(6, 1000, team);
     }
@@ -927,11 +979,26 @@ class Mike extends Character {
 
         if (this.cooldownTimer > 0) this.cooldownTimer--;
 
+        if(Players[this.team].attackHoldTime > 0 && Players[this.team].Characters[Players[this.team].selectedCharacter] == this && this.cooldownTimer == 0) {
+            if(Players[this.team].attackHoldTime == 1){
+                this.Target = this.Position;
+                return;
+            }
+
+            if(Players[this.team].attackHoldTime > this.maxHoldTime) Players[this.team].attackHoldTime = this.maxHoldTime;
+            this.Target = [this.Position[0] + Players[this.team].Buttons.rightStick[0] * this.targetMoveSpeed * Players[this.team].attackHoldTime, this.Position[1] + Players[this.team].Buttons.rightStick[1] * this.targetMoveSpeed * Players[this.team].attackHoldTime];
+        }
     };
 
     attack(): void { };
 
-    drawAttackPreview(): void { }
+    drawAttackPreview(): void { 
+        context.fillStyle = attackPreviewStyle;
+        context.beginPath();
+        context.arc(this.Target[0] + this.width / 2, this.Target[1] + this.height / 2, (this.maxRadius-this.minRadius) * (Players[this.team].attackHoldTime / this.maxHoldTime) + this.minRadius, 0, 2 * Math.PI);
+        context.fill();
+    }
+
 }
 
 class Bill extends Character {
@@ -1069,7 +1136,7 @@ const attackPreviewStyle = "rgba(0, 0, 0, 0.3)";
 // Define global arrays
 var Gamepads: Array<Gamepad> = [];
 var Players: Array<Player> = [new Player(0), new Player(1)];
-var Goals: Array<Goal> = [new Goal([40, window.innerHeight/2 - 60], 50, 120, 1), new Goal([window.innerWidth - 65, window.innerHeight/2 - 60], 50, 120, 0)];
+var Goals: Array<Goal> = [new Goal([30, window.innerHeight / 2 - 40], 50, 80, 1), new Goal([window.innerWidth - 80, window.innerHeight / 2 - 40], 50, 80, 0)];
 var Objects: Array<CollidableObject> = [new Box([window.innerWidth / 2 - 250, window.innerHeight / 2 - 50], 100, 100), new Box([window.innerWidth / 2 + 150, window.innerHeight / 2 - 50], 100, 100)];
 
 // Ball
@@ -1137,7 +1204,7 @@ function querryControllers() {
 }
 
 function update() {
-    if(game.paused) return; // If the game is paused, don't update anything
+    if (game.paused) return; // If the game is paused, don't update anything
 
     ball.update();
 

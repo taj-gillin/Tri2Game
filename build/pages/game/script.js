@@ -102,7 +102,7 @@ var Player = /** @class */ (function () {
             leftStick: [0, 0],
             rightStick: [0, 0]
         };
-        this.Characters = [new Shelly(this.controllerNumber), new Esteban(this.controllerNumber), new Bill(this.controllerNumber)];
+        this.Characters = [new Mike(this.controllerNumber), new Esteban(this.controllerNumber), new Bill(this.controllerNumber)];
     }
     Player.prototype.checkButtons = function (gamepad) {
         this.Buttons.a = gamepad.buttons[0].pressed;
@@ -452,7 +452,7 @@ var ShotgunBullet = /** @class */ (function (_super) {
         }
     };
     ShotgunBullet.prototype.draw = function () {
-        context.fillStyle = "red";
+        context.fillStyle = "black";
         context.beginPath();
         context.arc(this.Position[0], this.Position[1], 5, 0, 2 * Math.PI);
         context.fill();
@@ -466,7 +466,7 @@ var Bomb = /** @class */ (function (_super) {
     __extends(Bomb, _super);
     function Bomb(Position, team, radius) {
         var _this = _super.call(this, Position, [0, 0], team) || this;
-        _this.timer = 2000 * (frameRate / 1000);
+        _this.timer = 750 * (frameRate / 1000);
         _this.radius = radius;
         return _this;
     }
@@ -505,6 +505,38 @@ var Bomb = /** @class */ (function (_super) {
         return false;
     };
     return Bomb;
+}(Bullet));
+var MoneyBag = /** @class */ (function (_super) {
+    __extends(MoneyBag, _super);
+    function MoneyBag(Position, team, radius) {
+        var _this = _super.call(this, Position, [0, 0], team) || this;
+        _this.radius = radius;
+        return _this;
+    }
+    MoneyBag.prototype.draw = function () {
+    };
+    MoneyBag.prototype.update = function () {
+    };
+    MoneyBag.prototype.explode = function () {
+        for (var _i = 0, _a = Players[(this.team + 1) % 2].Characters; _i < _a.length; _i++) {
+            var character = _a[_i];
+            if (this.checkDistance(character)) {
+                character.die();
+            }
+        }
+    };
+    MoneyBag.prototype.checkDistance = function (character) {
+        if (this.Position[0] + this.radius > character.Position[0] && this.Position[0] - this.radius < character.Position[0] + character.width && this.Position[1] + this.radius > character.Position[1] && this.Position[1] - this.radius < character.Position[1] + character.height)
+            return true;
+        var distanceTL = Math.sqrt(Math.pow(character.Position[0] - (this.Position[0]), 2) + Math.pow(character.Position[1] - (this.Position[1]), 2));
+        var distanceTR = Math.sqrt(Math.pow(character.Position[0] + character.width - (this.Position[0]), 2) + Math.pow(character.Position[1] - (this.Position[1]), 2));
+        var distanceBL = Math.sqrt(Math.pow(character.Position[0] - (this.Position[0]), 2) + Math.pow(character.Position[1] + character.height - (this.Position[1]), 2));
+        var distanceBR = Math.sqrt(Math.pow(character.Position[0] + character.width - (this.Position[0]), 2) + Math.pow(character.Position[1] + character.height - (this.Position[1]), 2));
+        if (distanceTL < this.radius || distanceTR < this.radius || distanceBL < this.radius || distanceBR < this.radius)
+            return true;
+        return false;
+    };
+    return MoneyBag;
 }(Bullet));
 var Arrow = /** @class */ (function (_super) {
     __extends(Arrow, _super);
@@ -787,7 +819,17 @@ var Shelly = /** @class */ (function (_super) {
 var Mike = /** @class */ (function (_super) {
     __extends(Mike, _super);
     function Mike(team) {
-        return _super.call(this, 6, 1000, team) || this;
+        var _this = _super.call(this, 6, 1000, team) || this;
+        _this.Target = [0, 0];
+        _this.throwTimeMin = 1000 * frameRate / 1000;
+        _this.throwTimeMax = 2000 * frameRate / 1000;
+        _this.throwDistanceMax = 700;
+        _this.targetMoveSpeed = 0.3;
+        _this.minRadius = 20;
+        _this.maxRadius = 50;
+        _this.MoneyBags = [];
+        _this.maxHoldTime = 5000 * frameRate / 1000;
+        return _this;
     }
     Mike.prototype.draw = function () {
         if (this.respawnTimer > 1) {
@@ -806,11 +848,25 @@ var Mike = /** @class */ (function (_super) {
             return;
         if (this.cooldownTimer > 0)
             this.cooldownTimer--;
+        if (Players[this.team].attackHoldTime > 0 && Players[this.team].Characters[Players[this.team].selectedCharacter] == this && this.cooldownTimer == 0) {
+            if (Players[this.team].attackHoldTime == 1) {
+                this.Target = this.Position;
+                return;
+            }
+            if (Players[this.team].attackHoldTime > this.maxHoldTime)
+                Players[this.team].attackHoldTime = this.maxHoldTime;
+            this.Target = [this.Position[0] + Players[this.team].Buttons.rightStick[0] * this.targetMoveSpeed * Players[this.team].attackHoldTime, this.Position[1] + Players[this.team].Buttons.rightStick[1] * this.targetMoveSpeed * Players[this.team].attackHoldTime];
+        }
     };
     ;
     Mike.prototype.attack = function () { };
     ;
-    Mike.prototype.drawAttackPreview = function () { };
+    Mike.prototype.drawAttackPreview = function () {
+        context.fillStyle = attackPreviewStyle;
+        context.beginPath();
+        context.arc(this.Target[0] + this.width / 2, this.Target[1] + this.height / 2, (this.maxRadius - this.minRadius) * (Players[this.team].attackHoldTime / this.maxHoldTime) + this.minRadius, 0, 2 * Math.PI);
+        context.fill();
+    };
     return Mike;
 }(Character));
 var Bill = /** @class */ (function (_super) {
@@ -931,7 +987,7 @@ var attackPreviewStyle = "rgba(0, 0, 0, 0.3)";
 // Define global arrays
 var Gamepads = [];
 var Players = [new Player(0), new Player(1)];
-var Goals = [new Goal([40, window.innerHeight / 2 - 60], 50, 120, 1), new Goal([window.innerWidth - 65, window.innerHeight / 2 - 60], 50, 120, 0)];
+var Goals = [new Goal([30, window.innerHeight / 2 - 40], 50, 80, 1), new Goal([window.innerWidth - 80, window.innerHeight / 2 - 40], 50, 80, 0)];
 var Objects = [new Box([window.innerWidth / 2 - 250, window.innerHeight / 2 - 50], 100, 100), new Box([window.innerWidth / 2 + 150, window.innerHeight / 2 - 50], 100, 100)];
 // Ball
 var ball = new Ball();
