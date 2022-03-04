@@ -279,10 +279,26 @@ var Box = /** @class */ (function (_super) {
     }
     Box.prototype.update = function () { };
     Box.prototype.draw = function () {
-        context.fillStyle = "black";
-        context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
+        context.drawImage(Images["Tileset"], 150, 188, 37, 37, this.Position[0], this.Position[1], this.width, this.height);
+        // context.fillStyle = "black";
+        // context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
     };
     return Box;
+}(CollidableObject));
+var Pole = /** @class */ (function (_super) {
+    __extends(Pole, _super);
+    function Pole(Position, width, height, topPadding) {
+        var _this = _super.call(this, Position, width, height) || this;
+        _this.topPadding = topPadding;
+        return _this;
+    }
+    Pole.prototype.update = function () { };
+    Pole.prototype.draw = function () {
+        context.drawImage(Images["Pole"], this.Position[0], this.Position[1] - this.topPadding, this.width, this.height + this.topPadding);
+        // context.fillStyle = "black";
+        // context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
+    };
+    return Pole;
 }(CollidableObject));
 var Goal = /** @class */ (function (_super) {
     __extends(Goal, _super);
@@ -533,10 +549,7 @@ var MoneyBag = /** @class */ (function (_super) {
         return _this;
     }
     MoneyBag.prototype.draw = function () {
-        context.fillStyle = "yellow";
-        context.beginPath();
-        context.arc(this.Position[0], this.Position[1], 20, 0, 2 * Math.PI);
-        context.fill();
+        context.drawImage(Images["Tileset"], 207, 188, 18, 18, this.Position[0] - 18, this.Position[1] - 18, 36, 36);
     };
     MoneyBag.prototype.update = function () {
         var theta = Math.atan2(this.Target[1] - this.Position[1], this.Target[0] - this.Position[0]);
@@ -776,7 +789,7 @@ var Character = /** @class */ (function (_super) {
 var Shelly = /** @class */ (function (_super) {
     __extends(Shelly, _super);
     function Shelly(team) {
-        var _this = _super.call(this, 4, 1000, team) || this;
+        var _this = _super.call(this, 5, 1000, team) || this;
         _this.Bullets = [];
         _this.bulletCount = 10;
         _this.maxTime = 1000; // Time until full distance/min spread shot in milliseconds
@@ -850,7 +863,7 @@ var Shelly = /** @class */ (function (_super) {
 var Mike = /** @class */ (function (_super) {
     __extends(Mike, _super);
     function Mike(team) {
-        var _this = _super.call(this, 6, 1000, team) || this;
+        var _this = _super.call(this, 3, 1000, team) || this;
         _this.Target = [0, 0];
         _this.throwTimeMin = 1000 * frameRate / 1000;
         _this.throwTimeMax = 2000 * frameRate / 1000;
@@ -916,7 +929,7 @@ var Mike = /** @class */ (function (_super) {
 var Bill = /** @class */ (function (_super) {
     __extends(Bill, _super);
     function Bill(team) {
-        var _this = _super.call(this, 8, 1000, team) || this;
+        var _this = _super.call(this, 7, 1000, team) || this;
         _this.Bombs = [];
         _this.attackRadius = 100;
         return _this;
@@ -964,7 +977,7 @@ var Bill = /** @class */ (function (_super) {
 var Esteban = /** @class */ (function (_super) {
     __extends(Esteban, _super);
     function Esteban(team) {
-        var _this = _super.call(this, 4, 1000, team) || this;
+        var _this = _super.call(this, 5, 1000, team) || this;
         _this.Arrows = [];
         _this.maxTime = 1200; // Time until full distance/min spread shot in milliseconds
         _this.arrowInfo = {
@@ -1066,7 +1079,7 @@ var attackPreviewStyle = "rgba(0, 0, 0, 0.3)";
 var Gamepads = [];
 var Players = [new Player(0), new Player(1)];
 var Goals = [new Goal([30, window.innerHeight / 2 - 40], 50, 80, 1), new Goal([window.innerWidth - 80, window.innerHeight / 2 - 40], 50, 80, 0)];
-var Objects = [new Box([window.innerWidth / 2 - 250, window.innerHeight / 2 - 50], 100, 100), new Box([window.innerWidth / 2 + 150, window.innerHeight / 2 - 50], 100, 100)];
+var Objects = [new Box([window.innerWidth / 2 - 500, window.innerHeight / 2 - 50], 100, 100), new Box([window.innerWidth / 2 + 400, window.innerHeight / 2 - 50], 100, 100), new Box([window.innerWidth / 2 - 250, window.innerHeight / 2 - 250], 100, 100), new Box([window.innerWidth / 2 - 250, window.innerHeight / 2 + 150], 100, 100), new Box([window.innerWidth / 2 + 150, window.innerHeight / 2 - 250], 100, 100), new Box([window.innerWidth / 2 + 150, window.innerHeight / 2 + 150], 100, 100)];
 var VFXs = [];
 // Ball
 var ball = new Ball();
@@ -1189,6 +1202,8 @@ var Images = {
     "Bomb8": new Image(),
     "Bomb9": new Image(),
     "Bomb10": new Image(),
+    "Tileset": new Image(),
+    "Pole": new Image(),
 };
 Images["Esteban0"].src = "../../../assets/textures/characters/Esteban0.png";
 Images["Shelly0"].src = "../../../assets/textures/characters/Shelly0.png";
@@ -1211,3 +1226,5 @@ Images["Bomb7"].src = "../../../assets/textures/environment/bomb/7.png";
 Images["Bomb8"].src = "../../../assets/textures/environment/bomb/8.png";
 Images["Bomb9"].src = "../../../assets/textures/environment/bomb/9.png";
 Images["Bomb10"].src = "../../../assets/textures/environment/bomb/10.png";
+Images["Tileset"].src = "../../../assets/textures/environment/tileset.png";
+Images["Pole"].src = "../../../assets/textures/environment/Pole.png";

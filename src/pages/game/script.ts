@@ -319,10 +319,28 @@ class Box extends CollidableObject {
     update(): void { }
 
     draw(): void {
-        context.fillStyle = "black";
-        context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
+        context.drawImage(Images["Tileset"],150,188,37,37,this.Position[0],this.Position[1],this.width,this.height);
+
+        // context.fillStyle = "black";
+        // context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
+    }
+}
+
+class Pole extends CollidableObject {
+    topPadding: number;
+    constructor(Position: [number, number], width, height, topPadding) {
+        super(Position, width, height);
+        this.topPadding = topPadding;
     }
 
+    update(): void { }
+
+    draw(): void {
+        context.drawImage(Images["Pole"],this.Position[0],this.Position[1] - this.topPadding,this.width,this.height + this.topPadding);
+
+        // context.fillStyle = "black";
+        // context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
+    }
 }
 
 class Goal extends CollidableObject {
@@ -601,10 +619,9 @@ class MoneyBag extends Bullet {
     }
 
     draw(): void {
-        context.fillStyle = "yellow";
-        context.beginPath();
-        context.arc(this.Position[0], this.Position[1], 20, 0, 2 * Math.PI);
-        context.fill();
+    
+
+        context.drawImage(Images["Tileset"], 207, 188, 18,18, this.Position[0] - 18, this.Position[1] - 18, 36, 36);
     }
 
     update(): void {
@@ -902,7 +919,7 @@ class Shelly extends Character {
     maxTime: number = 1000; // Time until full distance/min spread shot in milliseconds
 
     constructor(team: number) {
-        super(4, 1000, team);
+        super(5, 1000, team);
         this.bulletInfo = {
             minDistance: 300,
             maxDistance: 700,
@@ -989,7 +1006,7 @@ class Mike extends Character {
     maxHoldTime: number = 2000 * frameRate/1000;
 
     constructor(team: number) {
-        super(6, 1000, team);
+        super(3, 1000, team);
     }
 
     draw(): void {
@@ -1053,7 +1070,7 @@ class Bill extends Character {
     attackRadius: number = 100;
 
     constructor(team: number) {
-        super(8, 1000, team);
+        super(7, 1000, team);
     }
 
     draw(): void {
@@ -1110,7 +1127,7 @@ class Esteban extends Character {
     maxTime: number = 1200; // Time until full distance/min spread shot in milliseconds
 
     constructor(team: number) {
-        super(4, 1000, team);
+        super(5, 1000, team);
         this.arrowInfo = {
             distance: 2000,
             travelTime: this.maxTime * (frameRate / 1000),
@@ -1228,7 +1245,7 @@ const attackPreviewStyle = "rgba(0, 0, 0, 0.3)";
 var Gamepads: Array<Gamepad> = [];
 var Players: Array<Player> = [new Player(0), new Player(1)];
 var Goals: Array<Goal> = [new Goal([30, window.innerHeight / 2 - 40], 50, 80, 1), new Goal([window.innerWidth - 80, window.innerHeight / 2 - 40], 50, 80, 0)];
-var Objects: Array<CollidableObject> = [new Box([window.innerWidth / 2 - 250, window.innerHeight / 2 - 50], 100, 100), new Box([window.innerWidth / 2 + 150, window.innerHeight / 2 - 50], 100, 100)];
+var Objects: Array<CollidableObject> = [new Box([window.innerWidth / 2 - 500, window.innerHeight / 2 - 50], 100, 100), new Box([window.innerWidth / 2 + 400, window.innerHeight / 2 - 50], 100, 100), new Box([window.innerWidth / 2 - 250, window.innerHeight / 2 - 250], 100, 100),new Box([window.innerWidth / 2 - 250, window.innerHeight / 2 + 150], 100, 100), new Box([window.innerWidth / 2 + 150, window.innerHeight / 2 - 250], 100, 100),new Box([window.innerWidth / 2 + 150, window.innerHeight / 2 + 150], 100, 100)];
 var VFXs: Array<VFX> = [];
 
 // Ball
@@ -1369,6 +1386,8 @@ const Images: { [key: string]: HTMLImageElement } = {
     "Bomb8": new Image(),
     "Bomb9": new Image(),
     "Bomb10": new Image(),
+    "Tileset": new Image(),
+    "Pole": new Image(),
 };
 
 Images["Esteban0"].src = "../../../assets/textures/characters/Esteban0.png";
@@ -1392,3 +1411,5 @@ Images["Bomb7"].src = "../../../assets/textures/environment/bomb/7.png";
 Images["Bomb8"].src = "../../../assets/textures/environment/bomb/8.png";
 Images["Bomb9"].src = "../../../assets/textures/environment/bomb/9.png";
 Images["Bomb10"].src = "../../../assets/textures/environment/bomb/10.png";
+Images["Tileset"].src = "../../../assets/textures/environment/tileset.png";
+Images["Pole"].src = "../../../assets/textures/environment/Pole.png";
