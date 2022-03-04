@@ -29,6 +29,29 @@ class Game {
     }
 
     init() {
+        let Selection = JSON.parse(localStorage.getItem("Selection"));
+
+        for (let i = 0; i < Players.length; i++) {
+            for (let j = 0; j < 3; j++) {
+                console.log(Selection[j + i * 3])
+                switch (Selection[j + i * 3]) {
+                    case 1:
+                        Players[i].Characters[j] = new Shelly(i);
+                        break;
+                    case 2:
+                        Players[i].Characters[j] = new Esteban(i);
+                        break;
+                    case 3:
+                        Players[i].Characters[j] = new Bill(i);
+                        break;
+                    case 4:
+                        Players[i].Characters[j] = new Mike(i);
+                        break;
+                }
+
+            }
+        }
+
         this.resetField();
     }
 
@@ -319,7 +342,7 @@ class Box extends CollidableObject {
     update(): void { }
 
     draw(): void {
-        context.drawImage(Images["Tileset"],150,188,37,37,this.Position[0],this.Position[1],this.width,this.height);
+        context.drawImage(Images["Tileset"], 150, 188, 37, 37, this.Position[0], this.Position[1], this.width, this.height);
 
         // context.fillStyle = "black";
         // context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
@@ -336,7 +359,7 @@ class Pole extends CollidableObject {
     update(): void { }
 
     draw(): void {
-        context.drawImage(Images["Pole"],this.Position[0],this.Position[1] - this.topPadding,this.width,this.height + this.topPadding);
+        context.drawImage(Images["Pole"], this.Position[0], this.Position[1] - this.topPadding, this.width, this.height + this.topPadding);
 
         // context.fillStyle = "black";
         // context.fillRect(this.Position[0], this.Position[1], this.width, this.height);
@@ -542,7 +565,7 @@ class Bomb extends Bullet {
     radius: number;
     frame: number = 1;
     frameStep: number = 0;
-    frameDelay: number = 50 * frameRate/1000;
+    frameDelay: number = 50 * frameRate / 1000;
 
     constructor(Position: [number, number], team: number, radius: number) {
         super(Position, [0, 0], team);
@@ -554,12 +577,12 @@ class Bomb extends Bullet {
         if (this.timer == 0) this.explode();
 
         this.frameStep++;
-        if(this.frameStep >= this.frameDelay){
+        if (this.frameStep >= this.frameDelay) {
             this.frame++;
             this.frameStep = 0;
         }
 
-        if(this.frame>=10) this.frame = 1;
+        if (this.frame >= 10) this.frame = 1;
     }
 
     explode(): void {
@@ -583,7 +606,7 @@ class Bomb extends Bullet {
         let imageHeight = 108;
         let rightPadding = 0;
         let topPadding = 25;
-        context.drawImage(Images[`Bomb${this.frame}`], rightPadding, topPadding, imageWidth-rightPadding, imageHeight-topPadding, this.Position[0] - (imageWidth - rightPadding)/2, this.Position[1] - (imageHeight - topPadding)/2, imageWidth-rightPadding, imageHeight-topPadding);
+        context.drawImage(Images[`Bomb${this.frame}`], rightPadding, topPadding, imageWidth - rightPadding, imageHeight - topPadding, this.Position[0] - (imageWidth - rightPadding) / 2, this.Position[1] - (imageHeight - topPadding) / 2, imageWidth - rightPadding, imageHeight - topPadding);
 
         context.fillStyle = attackPreviewStyle;
         context.beginPath();
@@ -612,16 +635,16 @@ class MoneyBag extends Bullet {
     radius: number;
     vMag: number = 10;
 
-    constructor(Position: [number, number], Target: [number,number], team: number, radius: number) {
+    constructor(Position: [number, number], Target: [number, number], team: number, radius: number) {
         super(Position, [0, 0], team);
         this.radius = radius;
         this.Target = Target;
     }
 
     draw(): void {
-    
 
-        context.drawImage(Images["Tileset"], 207, 188, 18,18, this.Position[0] - 18, this.Position[1] - 18, 36, 36);
+
+        context.drawImage(Images["Tileset"], 207, 188, 18, 18, this.Position[0] - 18, this.Position[1] - 18, 36, 36);
     }
 
     update(): void {
@@ -631,7 +654,7 @@ class MoneyBag extends Bullet {
         this.Position[1] += this.vMag * Math.sin(theta);
 
         let distFromTarget = Math.sqrt(Math.pow(this.Position[0] - this.Target[0], 2) + Math.pow(this.Position[1] - this.Target[1], 2));
-        if(distFromTarget < this.vMag * 1.1) this.explode();
+        if (distFromTarget < this.vMag * 1.1) this.explode();
     }
 
     explode(): void {
@@ -997,13 +1020,13 @@ class Shelly extends Character {
 class Mike extends Character {
 
     Target: [number, number] = [0, 0];
-    throwTimeMin: number = 1000 * frameRate/1000;
-    throwTimeMax: number = 2000 * frameRate/1000;
+    throwTimeMin: number = 1000 * frameRate / 1000;
+    throwTimeMax: number = 2000 * frameRate / 1000;
     targetMoveSpeed: number = 6;
     minRadius: number = 60;
     maxRadius: number = 200;
     MoneyBags: Array<MoneyBag> = [];
-    maxHoldTime: number = 2000 * frameRate/1000;
+    maxHoldTime: number = 2000 * frameRate / 1000;
 
     constructor(team: number) {
         super(3, 1000, team);
@@ -1013,7 +1036,7 @@ class Mike extends Character {
         for (var moneyBag of this.MoneyBags) {
             moneyBag.draw();
         }
-        
+
         if (this.respawnTimer > 1) {
             return;
         }
@@ -1029,8 +1052,8 @@ class Mike extends Character {
     }
 
     update(): void {
-        for(let moneyBag of this.MoneyBags) {
-            if(moneyBag.vMag == 0) this.MoneyBags.splice(this.MoneyBags.indexOf(moneyBag), 1);
+        for (let moneyBag of this.MoneyBags) {
+            if (moneyBag.vMag == 0) this.MoneyBags.splice(this.MoneyBags.indexOf(moneyBag), 1);
             moneyBag.update();
         }
 
@@ -1038,28 +1061,28 @@ class Mike extends Character {
 
         if (this.cooldownTimer > 0) this.cooldownTimer--;
 
-        if(Players[this.team].attackHoldTime > 0 && Players[this.team].Characters[Players[this.team].selectedCharacter] == this && this.cooldownTimer == 0) {
-            if(Players[this.team].attackHoldTime == 1){
+        if (Players[this.team].attackHoldTime > 0 && Players[this.team].Characters[Players[this.team].selectedCharacter] == this && this.cooldownTimer == 0) {
+            if (Players[this.team].attackHoldTime == 1) {
                 this.Target = this.Position;
                 return;
             }
 
-            if(Players[this.team].attackHoldTime > this.maxHoldTime) Players[this.team].attackHoldTime = this.maxHoldTime;
+            if (Players[this.team].attackHoldTime > this.maxHoldTime) Players[this.team].attackHoldTime = this.maxHoldTime;
             this.Target = [this.Position[0] + Players[this.team].Buttons.rightStick[0] * this.targetMoveSpeed * Players[this.team].attackHoldTime, this.Position[1] + Players[this.team].Buttons.rightStick[1] * this.targetMoveSpeed * Players[this.team].attackHoldTime];
         }
     };
 
-    attack(): void { 
+    attack(): void {
         this.cooldownTimer = this.cooldown;
 
-        this.MoneyBags.push(new MoneyBag([this.Position[0],this.Position[1]], [this.Target[0],this.Target[1]], this.team, (this.maxRadius-this.minRadius) * (Players[this.team].attackHoldTime / this.maxHoldTime) + this.minRadius));
-        this.Target = [-1000,-1000]
+        this.MoneyBags.push(new MoneyBag([this.Position[0], this.Position[1]], [this.Target[0], this.Target[1]], this.team, (this.maxRadius - this.minRadius) * (Players[this.team].attackHoldTime / this.maxHoldTime) + this.minRadius));
+        this.Target = [-1000, -1000]
     };
 
-    drawAttackPreview(): void { 
+    drawAttackPreview(): void {
         context.fillStyle = attackPreviewStyle;
         context.beginPath();
-        context.arc(this.Target[0] + this.width / 2, this.Target[1] + this.height / 2, (this.maxRadius-this.minRadius) * (Players[this.team].attackHoldTime / this.maxHoldTime) + this.minRadius, 0, 2 * Math.PI);
+        context.arc(this.Target[0] + this.width / 2, this.Target[1] + this.height / 2, (this.maxRadius - this.minRadius) * (Players[this.team].attackHoldTime / this.maxHoldTime) + this.minRadius, 0, 2 * Math.PI);
         context.fill();
     }
 
@@ -1184,10 +1207,10 @@ class Esteban extends Character {
 }
 
 abstract class VFX {
-    Position: [number,number];
+    Position: [number, number];
     timer: number;
-    
-    constructor(position: [number,number], timer: number) {
+
+    constructor(position: [number, number], timer: number) {
         this.Position = position;
         this.timer = timer;
     }
@@ -1207,10 +1230,10 @@ class Explosion extends VFX {
     frame: number = 0;
     step: number = 1;
 
-    constructor(position: [number,number], timer: number, radius: number) {
+    constructor(position: [number, number], timer: number, radius: number) {
         super(position, timer);
         this.radius = radius;
-        this.frameDelay = this.timer/12;
+        this.frameDelay = this.timer / 12;
     }
 
     draw(): void {
@@ -1233,6 +1256,13 @@ var context = canvas.getContext("2d");
 context.canvas.width = window.innerWidth;
 context.canvas.height = window.innerHeight;
 
+// Define global arrays
+var Gamepads: Array<Gamepad> = [];
+var Players: Array<Player> = [new Player(0), new Player(1)];
+var Goals: Array<Goal> = [new Goal([30, window.innerHeight / 2 - 40], 50, 80, 1), new Goal([window.innerWidth - 80, window.innerHeight / 2 - 40], 50, 80, 0)];
+var Objects: Array<CollidableObject> = [new Box([window.innerWidth / 2 - 500, window.innerHeight / 2 - 50], 100, 100), new Box([window.innerWidth / 2 + 400, window.innerHeight / 2 - 50], 100, 100), new Box([window.innerWidth / 2 - 250, window.innerHeight / 2 - 250], 100, 100), new Box([window.innerWidth / 2 - 250, window.innerHeight / 2 + 150], 100, 100), new Box([window.innerWidth / 2 + 150, window.innerHeight / 2 - 250], 100, 100), new Box([window.innerWidth / 2 + 150, window.innerHeight / 2 + 150], 100, 100)];
+var VFXs: Array<VFX> = [];
+
 // Initiate game (stores game related variables)
 var game = new Game();
 
@@ -1240,13 +1270,6 @@ var game = new Game();
 const frameRate = 60;
 var state = "playing";
 const attackPreviewStyle = "rgba(0, 0, 0, 0.3)";
-
-// Define global arrays
-var Gamepads: Array<Gamepad> = [];
-var Players: Array<Player> = [new Player(0), new Player(1)];
-var Goals: Array<Goal> = [new Goal([30, window.innerHeight / 2 - 40], 50, 80, 1), new Goal([window.innerWidth - 80, window.innerHeight / 2 - 40], 50, 80, 0)];
-var Objects: Array<CollidableObject> = [new Box([window.innerWidth / 2 - 500, window.innerHeight / 2 - 50], 100, 100), new Box([window.innerWidth / 2 + 400, window.innerHeight / 2 - 50], 100, 100), new Box([window.innerWidth / 2 - 250, window.innerHeight / 2 - 250], 100, 100),new Box([window.innerWidth / 2 - 250, window.innerHeight / 2 + 150], 100, 100), new Box([window.innerWidth / 2 + 150, window.innerHeight / 2 - 250], 100, 100),new Box([window.innerWidth / 2 + 150, window.innerHeight / 2 + 150], 100, 100)];
-var VFXs: Array<VFX> = [];
 
 // Ball
 var ball = new Ball();
@@ -1319,7 +1342,7 @@ function update() {
 
     for (const vfx of VFXs) {
         vfx.update();
-        if(vfx.timer == 0) VFXs.splice(VFXs.indexOf(vfx), 1);
+        if (vfx.timer == 0) VFXs.splice(VFXs.indexOf(vfx), 1);
     }
 
     for (const player of Players) {

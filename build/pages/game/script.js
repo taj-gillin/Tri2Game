@@ -20,6 +20,26 @@ var Game = /** @class */ (function () {
         this.paused = false;
     }
     Game.prototype.init = function () {
+        var Selection = JSON.parse(localStorage.getItem("Selection"));
+        for (var i = 0; i < Players.length; i++) {
+            for (var j = 0; j < 3; j++) {
+                console.log(Selection[j + i * 3]);
+                switch (Selection[j + i * 3]) {
+                    case 1:
+                        Players[i].Characters[j] = new Shelly(i);
+                        break;
+                    case 2:
+                        Players[i].Characters[j] = new Esteban(i);
+                        break;
+                    case 3:
+                        Players[i].Characters[j] = new Bill(i);
+                        break;
+                    case 4:
+                        Players[i].Characters[j] = new Mike(i);
+                        break;
+                }
+            }
+        }
         this.resetField();
     };
     Game.prototype.goalScored = function (team) {
@@ -1069,18 +1089,18 @@ var canvas = document.getElementById("canvas");
 var context = canvas.getContext("2d");
 context.canvas.width = window.innerWidth;
 context.canvas.height = window.innerHeight;
-// Initiate game (stores game related variables)
-var game = new Game();
-// Define global variables
-var frameRate = 60;
-var state = "playing";
-var attackPreviewStyle = "rgba(0, 0, 0, 0.3)";
 // Define global arrays
 var Gamepads = [];
 var Players = [new Player(0), new Player(1)];
 var Goals = [new Goal([30, window.innerHeight / 2 - 40], 50, 80, 1), new Goal([window.innerWidth - 80, window.innerHeight / 2 - 40], 50, 80, 0)];
 var Objects = [new Box([window.innerWidth / 2 - 500, window.innerHeight / 2 - 50], 100, 100), new Box([window.innerWidth / 2 + 400, window.innerHeight / 2 - 50], 100, 100), new Box([window.innerWidth / 2 - 250, window.innerHeight / 2 - 250], 100, 100), new Box([window.innerWidth / 2 - 250, window.innerHeight / 2 + 150], 100, 100), new Box([window.innerWidth / 2 + 150, window.innerHeight / 2 - 250], 100, 100), new Box([window.innerWidth / 2 + 150, window.innerHeight / 2 + 150], 100, 100)];
 var VFXs = [];
+// Initiate game (stores game related variables)
+var game = new Game();
+// Define global variables
+var frameRate = 60;
+var state = "playing";
+var attackPreviewStyle = "rgba(0, 0, 0, 0.3)";
 // Ball
 var ball = new Ball();
 // Add walls
