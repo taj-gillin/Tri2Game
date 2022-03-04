@@ -10,6 +10,64 @@ Images["Shelly0"].src = "../../../assets/textures/characters/Shelly0.png";
 Images["Bill0"].src = "../../../assets/textures/characters/Bill0.png";
 Images["Mike0"].src = "../../../assets/textures/characters/Mike0.png";
 
+
+function drawCharacter(number, Position, Size) {
+  let character = "";
+  switch (number) {
+    case 1:
+      character = "Shelly";
+      break;
+    case 2:
+      character = "Esteban";
+      break;
+    case 3:
+      character = "Bill";
+      break;
+    case 4:
+      character = "Mike";
+      break;
+  }
+
+
+  let directionShift = 2;
+  // switch (this.direction) {
+  //   case "UP":
+  //     directionShift = 0;
+  //     break;
+  //   case "LEFT":
+  //     directionShift = 1;
+  //     break;
+  //   case "DOWN":
+  //     directionShift = 2;
+  //     break;
+  //   case "RIGHT":
+  //     directionShift = 3;
+  //     break;
+  // }
+
+  // if (Math.sqrt(Math.pow(this.Velocity[0], 2) + Math.pow(this.Velocity[1], 2)) > 0.1) { // If the character is moving
+  //   // Update frame
+  //   this.delay = (this.delay + 1) % 4;
+  //   if (this.delay == 0) this.frame++;
+  //   this.frame %= 8;
+
+  //   // Draw
+  //   context.drawImage(Images[`${character}${this.team}`], (this.width + this.spritePadding.width * 2) * this.frame, (8 + directionShift) * (this.height + this.spritePadding.height), this.width + this.spritePadding.width * 2, this.height + this.spritePadding.height, this.Position[0] - this.spritePadding.width, this.Position[1] - this.spritePadding.height, this.width + this.spritePadding.width * 2, this.height + this.spritePadding.height);
+  //   return;
+  // }
+
+  // Character is not moving
+  let frame = 0;
+  let width = 32;
+  width = Size[0]
+  let height = 52
+  height = Size[1]
+  let spritePadding = { width: (64 - width) / 2, height: (64 - height) }; // This is used because the sprites are 64x64, but some of that is empty space used for larger animations and I don't want that. The width is what is cut off of both sides, the height is what is cut off of the top.
+
+  ctx.drawImage(Images[`${character}0`], (width + spritePadding.width * 2) * frame, (8 + directionShift) * (height + spritePadding.height), width + spritePadding.width * 2, height + spritePadding.height, Position[0] - spritePadding.width, Position[1] - spritePadding.height, width + spritePadding.width * 2, height + spritePadding.height);
+}
+
+
 var canvas = document.getElementById("drawingArea");
 var ctx = canvas.getContext("2d");
 
@@ -32,6 +90,7 @@ function drawBox1() { //top right
   ctx.textAlign = "center";
   ctx.fillStyle = "black";
   ctx.fillText("1", 840 + 100, 270 + 100);
+  // drawCharacter(1,[840 + 100, 270 + 100], [200, 200]);
 }
 
 function drawBox2() { //top left
@@ -156,6 +215,10 @@ function drawBoxCharacter6() { //bottom right
 }
 
 function drawBoxes() {
+  ctx.font = "60px Copperplate";
+  ctx.textAlign = "center";
+  ctx.fillStyle = "black";
+ctx.fillText("Choose your character!", window.innerWidth/2, 150);
   drawBox1();
   drawBox2();
   drawBox3();
@@ -257,62 +320,5 @@ function start() {
   window.location.href = "../game/index.html";
 }
 
-
-
-function drawCharacter(number, Position, Size) {
-  let character = "";
-  switch (number) {
-    case 1:
-      character = "Shelly";
-      break;
-    case 2:
-      character = "Esteban";
-      break;
-    case 3:
-      character = "Bill";
-      break;
-    case 4:
-      character = "Mike";
-      break;
-  }
-
-
-  let directionShift = 2;
-  // switch (this.direction) {
-  //   case "UP":
-  //     directionShift = 0;
-  //     break;
-  //   case "LEFT":
-  //     directionShift = 1;
-  //     break;
-  //   case "DOWN":
-  //     directionShift = 2;
-  //     break;
-  //   case "RIGHT":
-  //     directionShift = 3;
-  //     break;
-  // }
-
-  // if (Math.sqrt(Math.pow(this.Velocity[0], 2) + Math.pow(this.Velocity[1], 2)) > 0.1) { // If the character is moving
-  //   // Update frame
-  //   this.delay = (this.delay + 1) % 4;
-  //   if (this.delay == 0) this.frame++;
-  //   this.frame %= 8;
-
-  //   // Draw
-  //   context.drawImage(Images[`${character}${this.team}`], (this.width + this.spritePadding.width * 2) * this.frame, (8 + directionShift) * (this.height + this.spritePadding.height), this.width + this.spritePadding.width * 2, this.height + this.spritePadding.height, this.Position[0] - this.spritePadding.width, this.Position[1] - this.spritePadding.height, this.width + this.spritePadding.width * 2, this.height + this.spritePadding.height);
-  //   return;
-  // }
-
-  // Character is not moving
-  let frame = 0;
-  let width = 32;
-  width = Size[0]
-  let height = 52
-  height = Size[1]
-  let spritePadding = { width: (64 - width) / 2, height: (64 - height) }; // This is used because the sprites are 64x64, but some of that is empty space used for larger animations and I don't want that. The width is what is cut off of both sides, the height is what is cut off of the top.
-
-  ctx.drawImage(Images[`${character}0`], (width + spritePadding.width * 2) * frame, (8 + directionShift) * (height + spritePadding.height), width + spritePadding.width * 2, height + spritePadding.height, Position[0] - spritePadding.width, Position[1] - spritePadding.height, width + spritePadding.width * 2, height + spritePadding.height);
-}
 
 
