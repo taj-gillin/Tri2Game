@@ -23,6 +23,7 @@ var Game = /** @class */ (function () {
         this.resetField();
     };
     Game.prototype.goalScored = function (team) {
+        VFXs.push(new Explosion(ball.Position, 400 * (frameRate / 1000), 300));
         this.score[team]++;
         if (this.score[team] >= this.minWinScore) {
             this.endGame(team);
@@ -467,6 +468,9 @@ var Bomb = /** @class */ (function (_super) {
     function Bomb(Position, team, radius) {
         var _this = _super.call(this, Position, [0, 0], team) || this;
         _this.timer = 750 * (frameRate / 1000);
+        _this.frame = 1;
+        _this.frameStep = 0;
+        _this.frameDelay = 50 * frameRate / 1000;
         _this.radius = radius;
         return _this;
     }
@@ -474,6 +478,13 @@ var Bomb = /** @class */ (function (_super) {
         this.timer -= 1;
         if (this.timer == 0)
             this.explode();
+        this.frameStep++;
+        if (this.frameStep >= this.frameDelay) {
+            this.frame++;
+            this.frameStep = 0;
+        }
+        if (this.frame >= 10)
+            this.frame = 1;
     };
     Bomb.prototype.explode = function () {
         for (var _i = 0, _a = Players[(this.team + 1) % 2].Characters; _i < _a.length; _i++) {
@@ -482,12 +493,18 @@ var Bomb = /** @class */ (function (_super) {
                 character.die();
             }
         }
+        VFXs.push(new Explosion(this.Position, 200 * (frameRate / 1000), this.radius));
     };
     Bomb.prototype.draw = function () {
-        context.fillStyle = "black";
-        context.beginPath();
-        context.arc(this.Position[0], this.Position[1], 10, 0, 2 * Math.PI);
-        context.fill();
+        // context.fillStyle = "black";
+        // context.beginPath();
+        // context.arc(this.Position[0], this.Position[1], 10, 0, 2 * Math.PI);
+        // context.fill();
+        var imageWidth = 96;
+        var imageHeight = 108;
+        var rightPadding = 0;
+        var topPadding = 25;
+        context.drawImage(Images["Bomb" + this.frame], rightPadding, topPadding, imageWidth - rightPadding, imageHeight - topPadding, this.Position[0] - (imageWidth - rightPadding) / 2, this.Position[1] - (imageHeight - topPadding) / 2, imageWidth - rightPadding, imageHeight - topPadding);
         context.fillStyle = attackPreviewStyle;
         context.beginPath();
         context.arc(this.Position[0], this.Position[1], this.radius, 0, 2 * Math.PI);
@@ -508,22 +525,36 @@ var Bomb = /** @class */ (function (_super) {
 }(Bullet));
 var MoneyBag = /** @class */ (function (_super) {
     __extends(MoneyBag, _super);
-    function MoneyBag(Position, team, radius) {
+    function MoneyBag(Position, Target, team, radius) {
         var _this = _super.call(this, Position, [0, 0], team) || this;
+        _this.vMag = 10;
         _this.radius = radius;
+        _this.Target = Target;
         return _this;
     }
     MoneyBag.prototype.draw = function () {
+        context.fillStyle = "yellow";
+        context.beginPath();
+        context.arc(this.Position[0], this.Position[1], 20, 0, 2 * Math.PI);
+        context.fill();
     };
     MoneyBag.prototype.update = function () {
+        var theta = Math.atan2(this.Target[1] - this.Position[1], this.Target[0] - this.Position[0]);
+        this.Position[0] += this.vMag * Math.cos(theta);
+        this.Position[1] += this.vMag * Math.sin(theta);
+        var distFromTarget = Math.sqrt(Math.pow(this.Position[0] - this.Target[0], 2) + Math.pow(this.Position[1] - this.Target[1], 2));
+        if (distFromTarget < this.vMag * 1.1)
+            this.explode();
     };
     MoneyBag.prototype.explode = function () {
+        this.vMag = 0;
         for (var _i = 0, _a = Players[(this.team + 1) % 2].Characters; _i < _a.length; _i++) {
             var character = _a[_i];
             if (this.checkDistance(character)) {
                 character.die();
             }
         }
+        VFXs.push(new Explosion(this.Position, 200 * (frameRate / 1000), this.radius));
     };
     MoneyBag.prototype.checkDistance = function (character) {
         if (this.Position[0] + this.radius > character.Position[0] && this.Position[0] - this.radius < character.Position[0] + character.width && this.Position[1] + this.radius > character.Position[1] && this.Position[1] - this.radius < character.Position[1] + character.height)
@@ -823,15 +854,18 @@ var Mike = /** @class */ (function (_super) {
         _this.Target = [0, 0];
         _this.throwTimeMin = 1000 * frameRate / 1000;
         _this.throwTimeMax = 2000 * frameRate / 1000;
-        _this.throwDistanceMax = 700;
-        _this.targetMoveSpeed = 0.3;
-        _this.minRadius = 20;
-        _this.maxRadius = 50;
+        _this.targetMoveSpeed = 6;
+        _this.minRadius = 60;
+        _this.maxRadius = 200;
         _this.MoneyBags = [];
-        _this.maxHoldTime = 5000 * frameRate / 1000;
+        _this.maxHoldTime = 2000 * frameRate / 1000;
         return _this;
     }
     Mike.prototype.draw = function () {
+        for (var _i = 0, _a = this.MoneyBags; _i < _a.length; _i++) {
+            var moneyBag = _a[_i];
+            moneyBag.draw();
+        }
         if (this.respawnTimer > 1) {
             return;
         }
@@ -844,6 +878,12 @@ var Mike = /** @class */ (function (_super) {
         this.drawCharacter("Mike");
     };
     Mike.prototype.update = function () {
+        for (var _i = 0, _a = this.MoneyBags; _i < _a.length; _i++) {
+            var moneyBag = _a[_i];
+            if (moneyBag.vMag == 0)
+                this.MoneyBags.splice(this.MoneyBags.indexOf(moneyBag), 1);
+            moneyBag.update();
+        }
         if (!this.tryRespawn())
             return;
         if (this.cooldownTimer > 0)
@@ -859,7 +899,11 @@ var Mike = /** @class */ (function (_super) {
         }
     };
     ;
-    Mike.prototype.attack = function () { };
+    Mike.prototype.attack = function () {
+        this.cooldownTimer = this.cooldown;
+        this.MoneyBags.push(new MoneyBag([this.Position[0], this.Position[1]], [this.Target[0], this.Target[1]], this.team, (this.maxRadius - this.minRadius) * (Players[this.team].attackHoldTime / this.maxHoldTime) + this.minRadius));
+        this.Target = [-1000, -1000];
+    };
     ;
     Mike.prototype.drawAttackPreview = function () {
         context.fillStyle = attackPreviewStyle;
@@ -973,6 +1017,40 @@ var Esteban = /** @class */ (function (_super) {
     };
     return Esteban;
 }(Character));
+var VFX = /** @class */ (function () {
+    function VFX(position, timer) {
+        this.Position = position;
+        this.timer = timer;
+    }
+    VFX.prototype.countDown = function () {
+        this.timer--;
+    };
+    return VFX;
+}());
+var Explosion = /** @class */ (function (_super) {
+    __extends(Explosion, _super);
+    function Explosion(position, timer, radius) {
+        var _this = _super.call(this, position, timer) || this;
+        _this.frame = 0;
+        _this.step = 1;
+        _this.radius = radius;
+        _this.frameDelay = _this.timer / 12;
+        return _this;
+    }
+    Explosion.prototype.draw = function () {
+        var imageWidth = 96;
+        var imageHeight = 96;
+        context.drawImage(Images["Explosion"], this.frame * imageWidth, 0, imageWidth, imageHeight, this.Position[0] - this.radius, this.Position[1] - this.radius, this.radius * 2, this.radius * 2);
+    };
+    Explosion.prototype.update = function () {
+        console.log(this.frame);
+        this.step = (this.step + 1) % this.frameDelay;
+        if (this.step == 0)
+            this.frame++;
+        this.countDown();
+    };
+    return Explosion;
+}(VFX));
 // Initiate canvas
 var canvas = document.getElementById("canvas");
 var context = canvas.getContext("2d");
@@ -989,6 +1067,7 @@ var Gamepads = [];
 var Players = [new Player(0), new Player(1)];
 var Goals = [new Goal([30, window.innerHeight / 2 - 40], 50, 80, 1), new Goal([window.innerWidth - 80, window.innerHeight / 2 - 40], 50, 80, 0)];
 var Objects = [new Box([window.innerWidth / 2 - 250, window.innerHeight / 2 - 50], 100, 100), new Box([window.innerWidth / 2 + 150, window.innerHeight / 2 - 50], 100, 100)];
+var VFXs = [];
 // Ball
 var ball = new Ball();
 // Add walls
@@ -1045,16 +1124,22 @@ function update() {
     if (game.paused)
         return; // If the game is paused, don't update anything
     ball.update();
-    for (var _i = 0, Players_4 = Players; _i < Players_4.length; _i++) {
-        var player = Players_4[_i];
+    for (var _i = 0, VFXs_1 = VFXs; _i < VFXs_1.length; _i++) {
+        var vfx = VFXs_1[_i];
+        vfx.update();
+        if (vfx.timer == 0)
+            VFXs.splice(VFXs.indexOf(vfx), 1);
+    }
+    for (var _a = 0, Players_4 = Players; _a < Players_4.length; _a++) {
+        var player = Players_4[_a];
         player.update();
     }
-    for (var _a = 0, Objects_7 = Objects; _a < Objects_7.length; _a++) {
-        var object = Objects_7[_a];
+    for (var _b = 0, Objects_7 = Objects; _b < Objects_7.length; _b++) {
+        var object = Objects_7[_b];
         object.update();
     }
-    for (var _b = 0, Goals_2 = Goals; _b < Goals_2.length; _b++) {
-        var goal = Goals_2[_b];
+    for (var _c = 0, Goals_2 = Goals; _c < Goals_2.length; _c++) {
+        var goal = Goals_2[_c];
         goal.update();
     }
 }
@@ -1062,9 +1147,9 @@ function draw() {
     clearCanvas();
     game.display();
     ball.draw();
-    for (var _i = 0, Players_5 = Players; _i < Players_5.length; _i++) {
-        var player = Players_5[_i];
-        player.draw();
+    for (var _i = 0, VFXs_2 = VFXs; _i < VFXs_2.length; _i++) {
+        var vfx = VFXs_2[_i];
+        vfx.draw();
     }
     for (var _a = 0, Objects_8 = Objects; _a < Objects_8.length; _a++) {
         var object = Objects_8[_a];
@@ -1073,6 +1158,10 @@ function draw() {
     for (var _b = 0, Goals_3 = Goals; _b < Goals_3.length; _b++) {
         var goal = Goals_3[_b];
         goal.draw();
+    }
+    for (var _c = 0, Players_5 = Players; _c < Players_5.length; _c++) {
+        var player = Players_5[_c];
+        player.draw();
     }
 }
 function clearCanvas() {
@@ -1089,6 +1178,17 @@ var Images = {
     "Mike1": new Image(),
     "Cannons": new Image(),
     "Background": new Image(),
+    "Explosion": new Image(),
+    "Bomb1": new Image(),
+    "Bomb2": new Image(),
+    "Bomb3": new Image(),
+    "Bomb4": new Image(),
+    "Bomb5": new Image(),
+    "Bomb6": new Image(),
+    "Bomb7": new Image(),
+    "Bomb8": new Image(),
+    "Bomb9": new Image(),
+    "Bomb10": new Image(),
 };
 Images["Esteban0"].src = "../../../assets/textures/characters/Esteban0.png";
 Images["Shelly0"].src = "../../../assets/textures/characters/Shelly0.png";
@@ -1100,3 +1200,14 @@ Images["Bill1"].src = "../../../assets/textures/characters/Bill1.png";
 Images["Mike1"].src = "../../../assets/textures/characters/Mike1.png";
 Images["Cannons"].src = "../../../assets/textures/environment/cannons.png";
 Images["Background"].src = "../../../assets/textures/environment/background.png";
+Images["Explosion"].src = "../../../assets/textures/vfx/Explosion.png";
+Images["Bomb1"].src = "../../../assets/textures/environment/bomb/1.png";
+Images["Bomb2"].src = "../../../assets/textures/environment/bomb/2.png";
+Images["Bomb3"].src = "../../../assets/textures/environment/bomb/3.png";
+Images["Bomb4"].src = "../../../assets/textures/environment/bomb/4.png";
+Images["Bomb5"].src = "../../../assets/textures/environment/bomb/5.png";
+Images["Bomb6"].src = "../../../assets/textures/environment/bomb/6.png";
+Images["Bomb7"].src = "../../../assets/textures/environment/bomb/7.png";
+Images["Bomb8"].src = "../../../assets/textures/environment/bomb/8.png";
+Images["Bomb9"].src = "../../../assets/textures/environment/bomb/9.png";
+Images["Bomb10"].src = "../../../assets/textures/environment/bomb/10.png";
